@@ -197,6 +197,21 @@ function _inDebug() {
 }
 
 
+if (typeof i18next !== 'undefined') {
+    Template7.registerHelper('i18n', function (key, options) {
+        return i18next.t(key);
+    });
+    Template7.registerHelper('i18np', function (key, count, options) {
+        return i18next.t(key, {count : count || 1});
+    });
+    Template7.registerHelper('i18nc', function (key, context, options) {
+        return i18next.t(key, {context : context || 'male'});
+    });
+    Template7.registerHelper('i18ncp', function (key, context, count, options) {
+        return i18next.t(key, {context : context || 'male', count : count || 1});
+    });
+}
+
 var boxModule = {
     name: 'box-module',
     params: {
@@ -743,7 +758,33 @@ function _runApp() {
                         });
                 })
                 .then(function () {
+                    if ((pInst[resp.appId].lng || pInst.lng) && (typeof i18next !== 'undefined')) {
+                        return new Promise(function (resolve, reject) {
+                            var vln = pInst[resp.appId].i18n || pInst.i18n;
+                            if (vln) {
+                                vln.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
+                                i18next.init(vln, function (err, t) {
+                                    resolve();
+                                });
+                                return;
+                            }
+                            Framework7.request({
+                                url: 'i18n.json', method: 'GET', dataType: 'json', cache: false,
+                                success: function (irdata) {
+                                    irdata.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
 
+                                    i18next.init(irdata, function (err, t) {
+                                        resolve();
+                                    });
+                                },
+                                error: function () {
+                                    resolve();
+                                }
+                            });
+                        });
+                    }
+                })
+                .then(function () {
                     app = new Framework7(pInst);
                 });
 
