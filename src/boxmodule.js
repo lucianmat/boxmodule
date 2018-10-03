@@ -637,7 +637,9 @@ var boxModule = {
             Promise.resolve()
                 .then(function () {
                     if (self.params && self.params[boxModule.name] && self.params[boxModule.name].database) {
-                        return Parse.Database._initCollections(self.params[boxModule.name].database);
+                        return typeof self.initDatabase  === 'function' ? 
+                        self.initDatabase(self.params[boxModule.name].database)
+                            : Parse.Database._initCollections(self.params[boxModule.name].database);
                     }
                 })
                 .then(function () {
