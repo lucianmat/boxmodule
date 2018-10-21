@@ -799,6 +799,13 @@ function _runApp() {
 
 Framework7.use(boxModule);
 
+if (typeof Parse !== 'undefined') {
+    Parse.User._registerAuthenticationProvider({
+        getAuthType: function () { return 'anonymous'; },
+        restoreAuthentication: function () { return true; }
+    });
+}
+
 boxModule.static.localStorage.getItem('currentApp')
     .then(function (cr) {
         if (cr) {
