@@ -202,13 +202,13 @@ if (typeof i18next !== 'undefined') {
         return i18next.t(key);
     });
     Template7.registerHelper('i18np', function (key, count, options) {
-        return i18next.t(key, {count : count || 1});
+        return i18next.t(key, { count: count || 1 });
     });
     Template7.registerHelper('i18nc', function (key, context, options) {
-        return i18next.t(key, {context : context || 'male'});
+        return i18next.t(key, { context: context || 'male' });
     });
     Template7.registerHelper('i18ncp', function (key, context, count, options) {
-        return i18next.t(key, {context : context || 'male', count : count || 1});
+        return i18next.t(key, { context: context || 'male', count: count || 1 });
     });
 }
 
@@ -637,8 +637,8 @@ var boxModule = {
             Promise.resolve()
                 .then(function () {
                     if (self.params && self.params[boxModule.name] && self.params[boxModule.name].database) {
-                        return typeof self.initDatabase  === 'function' ? 
-                        self.initDatabase(self.params[boxModule.name].database)
+                        return typeof self.initDatabase === 'function' ?
+                            self.initDatabase(self.params[boxModule.name].database)
                             : Parse.Database._initCollections(self.params[boxModule.name].database);
                     }
                 })
@@ -714,11 +714,17 @@ function _runApp() {
                 name: resp.appName,
                 root: '#boxApp',
                 version: resp.version
+               // ,lazyModulesPath : '/vendor/Framework7/lazy-components/'
             };
 
             pInst[boxModule.name] = resp;
             pInst[resp.appId] = resp;
 
+            if (resp.lazyModulesPath) {
+                pInst.lazyModulesPath = resp.lazyModulesPath;
+                delete resp.lazyModulesPath;
+            }
+            
             Framework7.use(boxModule, resp);
 
             if (Framework7.prototype.modules[resp.appId] && Framework7.prototype.modules[resp.appId].routes) {
@@ -727,6 +733,12 @@ function _runApp() {
             }
 
             Parse._initialize(resp.appId, resp.javascriptKey);
+
+            Parse.User._registerAuthenticationProvider({
+                getAuthType: function () { return 'anonymous'; },
+                restoreAuthentication: function () { return true; }
+            });
+
             Parse.serverURL = resp.serverURL ? resp.serverURL :
                 (window.location && window.location.hostname === 'localhost' ?
                     'http://businessbox.omg/api/' :
@@ -787,6 +799,7 @@ function _runApp() {
                     }
                 })
                 .then(function () {
+  
                     app = new Framework7(pInst);
                 });
 
@@ -798,13 +811,6 @@ function _runApp() {
 }
 
 Framework7.use(boxModule);
-
-if (typeof Parse !== 'undefined') {
-    Parse.User._registerAuthenticationProvider({
-        getAuthType: function () { return 'anonymous'; },
-        restoreAuthentication: function () { return true; }
-    });
-}
 
 boxModule.static.localStorage.getItem('currentApp')
     .then(function (cr) {
