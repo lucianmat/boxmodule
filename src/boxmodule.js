@@ -643,6 +643,12 @@ var boxModule = {
                     }
                 })
                 .then(function () {
+
+                    Parse.User._registerAuthenticationProvider({
+                        getAuthType: function () { return 'anonymous'; },
+                        restoreAuthentication: function () { return true; }
+                    });
+
                     if ((self.params && !self.params.keepSplashScreen) &&
                         navigator.splashscreen && (typeof navigator.splashscreen.hide === 'function')) {
                         navigator.splashscreen.hide();
@@ -733,11 +739,6 @@ function _runApp() {
             }
 
             Parse._initialize(resp.appId, resp.javascriptKey);
-
-            Parse.User._registerAuthenticationProvider({
-                getAuthType: function () { return 'anonymous'; },
-                restoreAuthentication: function () { return true; }
-            });
 
             Parse.serverURL = resp.serverURL ? resp.serverURL :
                 (window.location && window.location.hostname === 'localhost' ?
