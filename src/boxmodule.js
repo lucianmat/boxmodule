@@ -402,6 +402,101 @@ var boxModule = {
             }
         },
         file: {
+            useFs: false,
+            // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFlags 
+            writeFile: function (path, data, options) {
+                var prq = Framework7.utils.extend({
+                    rootFs: cordova.file.dataDirectory,
+                    create: true, exclusive: false, append: false
+                }, options || {});
+
+                return new Promise(function (resolve, reject) {
+                    window.resolveLocalFileSystemURL(prq.rootFs, function (dentry) {
+                        Promise.resolve()
+                            .then(function () {
+                                if (path.indexOf('/') === -1) {
+                                    return dentry;
+                                }
+                                return Framework7.file.createDir(prq.rootFs, path.slice(0, path.lastIndexOf('/')));
+                            })
+                            .then(function (dirEntry) {
+                                dirEntry.getFile(path.slice(path.lastIndexOf('/') + 1),
+                                    { create: prq.create, exclusive: prq.exclusive },
+                                    function (fileEntry) {
+                                        fileEntry.createWriter(function (fileWriter) {
+                                            fileWriter.onwriteend = function () {
+                                                return resolve(fileEntry);
+                                            };
+                                            fileWriter.onerror = reject;
+                                            if (prq.append) {
+                                                try {
+                                                    fileWriter.seek(fileWriter.length);
+                                                }
+                                                catch (e) {
+
+                                                }
+                                            }
+                                            if (typeof data === 'string' || data instanceof String) {
+                                                data = new Blob([data], { type: 'text/plain' });
+                                            }
+                                            fileWriter.write(data);
+                                        }, reject);
+                                    }, reject);
+                            });
+                    });
+                });
+            },
+            getContent: function (path, options) {
+                return new Promise(function (resolve, reject) {
+                    var prq;
+                    if (Framework7.file.useFs) {
+                        prq = Framework7.utils.extend({ rootFs: cordova.file.dataDirectory, readAs: 'text' }, options || {});
+
+                        window.resolveLocalFileSystemURL(prq.rootFs, function (dentry) {
+                            Promise.resolve()
+                                .then(function () {
+                                    if (path.indexOf('/') === -1) {
+                                        return dentry;
+                                    }
+                                    return new Promise(function (pir, prj) {
+                                        dentry.getDirectory(path.slice(0, path.lastIndexOf('/')), { exclusive: false }, pir, prj);
+                                    });
+                                })
+                                .then(function (den) {
+                                    den.getFile(path.slice(path.lastIndexOf('/') + 1),
+                                        { exclusive: false },
+                                        function (fen) {
+                                            fen.file(function (file) {
+                                                var reader = new FileReader();
+                                                reader.onloadend = function () {
+                                                    return resolve(this.result);
+                                                };
+                                                reader.onerror = reject;
+                                                if (prq.readAs === 'text') {
+                                                    reader.readAsText(file);
+                                                } else if (prq.readAs === 'array') {
+                                                    reader.readAsArrayBuffer(file);
+                                                } else if (prq.readAs === 'url') {
+                                                    reader.readAsDataURL(file);
+                                                } else {
+                                                    reader.readAsBinaryString(file);
+                                                }
+                                            });
+                                        }, reject);
+                                });
+                        }, reject);
+                    } else {
+                        prq = Framework7.utils.extend({
+                            url: path,
+                            method: 'GET', dataType: 'json', cache: false,
+                            success: resolve,
+                            error: reject
+                        }, options || {});
+
+                        Framework7.request(prq);
+                    }
+                });
+            },
             removeDirectory: function (path) {
                 return new Promise(function (resolve, reject) {
                     var rpt = path.indexOf(cordova.file.dataDirectory) === 0 ? path : cordova.file.dataDirectory + path;
@@ -435,8 +530,26 @@ var boxModule = {
             },
             createDir: function (path, name, replace) {
                 return new Promise(function (resolve, reject) {
-                    window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                        fileSystem.getDirectory(name, { create: true, exclusive: !!replace }, resolve, reject);
+                    window.resolveLocalFileSystemURL(path, function (dirEntry) {
+                        var dirs = name.split("/").reverse(),
+                            root = dirEntry;
+
+                        var cDir = function (dir) {
+                            root.getDirectory(dir, {
+                                create: true,
+                                exclusive: false
+                            }, successCB, reject);
+                        };
+                        var successCB = function (entry) {
+                            root = entry;
+                            if (dirs.length > 0) {
+                                cDir(dirs.pop());
+                            } else {
+                                resolve(entry);
+                            }
+                        };
+
+                        cDir(dirs.pop());
                     }, reject);
                 });
             },
@@ -711,16 +824,17 @@ function _runApp() {
     };
 
     TraceKit.report.subscribe(_reportTrace);
-
-    Framework7.request({
-        url: 'config.json', method: 'GET', dataType: 'json', cache: false,
-        success: function (resp) {
+    Framework7.file.getContent('config.json')
+        .then(function (resp) {
+            if (Framework7.file.useFs) {
+                resp = JSON.parse(resp);
+            }
             var pInst = {
                 id: resp.appId,
                 name: resp.appName,
                 root: '#boxApp',
                 version: resp.version
-               // ,lazyModulesPath : '/vendor/Framework7/lazy-components/'
+                // ,lazyModulesPath : '/vendor/Framework7/lazy-components/'
             };
 
             pInst[boxModule.name] = resp;
@@ -730,7 +844,7 @@ function _runApp() {
                 pInst.lazyModulesPath = resp.lazyModulesPath;
                 delete resp.lazyModulesPath;
             }
-            
+
             Framework7.use(boxModule, resp);
 
             if (Framework7.prototype.modules[resp.appId] && Framework7.prototype.modules[resp.appId].routes) {
@@ -783,32 +897,27 @@ function _runApp() {
                                 });
                                 return;
                             }
-                            Framework7.request({
-                                url: 'i18n.json', method: 'GET', dataType: 'json', cache: false,
-                                success: function (irdata) {
+                            Framework7.file.getContent('i18n.json')
+                                .then(function (irdata) {
+                                    if (Framework7.file.useFs) {
+                                        irdata = JSON.parse(irdata);
+                                    }
                                     irdata.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
 
                                     i18next.init(irdata, function (err, t) {
                                         resolve();
                                     });
-                                },
-                                error: function () {
+                                })
+                                .catch(function () {
                                     resolve();
-                                }
-                            });
+                                });
                         });
                     }
                 })
                 .then(function () {
-  
                     app = new Framework7(pInst);
                 });
-
-        },
-        error: function (err) {
-            console.error(err);
-        }
-    });
+        });
 }
 
 Framework7.use(boxModule);
