@@ -193,11 +193,13 @@ function _closeNotification() {
 
 
 function _inDebug() {
-    return (typeof device !== 'undefined') && (!device.isVirtual || device.platform === 'browser');
+    return (typeof device !== 'undefined') && (device.isVirtual || device.platform === 'browser');
 }
 
+var _hasi18n = false;
 
 if (typeof i18next !== 'undefined') {
+    _hasi18n = true;
     Template7.registerHelper('i18n', function (key, options) {
         return i18next.t(key);
     });
@@ -372,6 +374,7 @@ var boxModule = {
     },
     static: {
         sessionId: appSession,
+        _inDebug : _inDebug,
         ui: {
             scrollPageTo: function (scrollTo, container, tout) {
                 if (typeof container === 'number') {
@@ -385,6 +388,17 @@ var boxModule = {
                 }
 
                 container.scrollTop(scrollTo.offset().top - container.offset().top + container.scrollTop(), tout);
+            }
+        },
+        i18n: {
+            t : function (key, options) {
+                return _hasi18n ? i18next.t(key, options) : key;
+            },
+            changeLanguage : function (lng) {
+                return _hasi18n ? i18next.changeLanguage(lng) : Promise.resolve();
+            },
+            language : function () {
+                return _hasi18n ? i18next.language : undefined;
             }
         },
         localStorage: {
@@ -606,7 +620,7 @@ var boxModule = {
                 app.notification.create({
                     title: app.name,
                     icon: '<i class="fa fa-bug color-red"></i>',
-                    text: 'Connection may be temporarily down, please try again later',
+                    text: Framework7.i18n.t('errors.connectiondown'),
                     closeOnClick: true,
                     closeTimeout: 5000
                 }).open();
@@ -615,8 +629,8 @@ var boxModule = {
             if (err.code === 1 || err.code === 101 || err.code === 107) {
                 app.notification.create({
                     title: app.name,
-                    icon: '<i class="fa fa-bug color-red"></i>',
-                    text: 'Service may be temporarily unavailable, please try again later',
+                    icon: '<i class="fa fa-bug text-color-red"></i>',
+                    text: Framework7.i18n.t('errors.servicedown'),
                     closeOnClick: true,
                     closeTimeout: 5000
                 }).open();
@@ -626,7 +640,7 @@ var boxModule = {
                 app.notification.create({
                     title: app.name,
                     icon: '<i class="fa fa-bug color-red"></i>',
-                    text: 'Service is busy, please try again later',
+                    text: Framework7.i18n.t('errors.servicebusy'),
                     closeOnClick: true,
                     closeTimeout: 5000
                 }).open();
@@ -636,7 +650,7 @@ var boxModule = {
                 app.notification.create({
                     title: app.name,
                     icon: '<i class="fa fa-bun color-red"></i>',
-                    text: 'Operation is forbidden',
+                    text: Framework7.i18n.t('errors.opperationForbiden'),
                     closeOnClick: true,
                     closeTimeout: 5000
                 }).open();
@@ -646,7 +660,7 @@ var boxModule = {
                 app.notification.create({
                     title: app.name,
                     icon: '<i class="fa fa-bun color-red"></i>',
-                    text: 'Session expired, please re-login',
+                    text: Framework7.i18n.t('errors.sessionExpired'),
                     closeOnClick: true,
                     closeTimeout: 5000
                 }).open();
@@ -887,7 +901,7 @@ function _runApp() {
                         });
                 })
                 .then(function () {
-                    if ((pInst[resp.appId].lng || pInst.lng) && (typeof i18next !== 'undefined')) {
+                    if ((pInst[resp.appId].lng || pInst.lng) && _hasi18n) {
                         return new Promise(function (resolve, reject) {
                             var vln = pInst[resp.appId].i18n || pInst.i18n;
                             if (vln) {
