@@ -463,12 +463,15 @@ var boxModule = {
             getContent: function (path, options) {
                 return new Promise(function (resolve, reject) {
                     var prq;
-                    if (Framework7.file.useFs) {
+                    if (Framework7.file.useFs && (!device|| (device && device.platform !== 'browser')) ) {
                         prq = Framework7.utils.extend({ rootFs: cordova.file.dataDirectory, readAs: 'text' }, options || {});
 
                         window.resolveLocalFileSystemURL(prq.rootFs, function (dentry) {
                             Promise.resolve()
                                 .then(function () {
+                                    if (prq.rootFs === cordova.file.applicationDirectory) {
+                                        path = 'www/' + path;
+                                    }
                                     if (path.indexOf('/') === -1) {
                                         return dentry;
                                     }
@@ -483,10 +486,14 @@ var boxModule = {
                                             fen.file(function (file) {
                                                 var reader = new FileReader();
                                                 reader.onloadend = function () {
-                                                    return resolve(this.result);
+                                                    var result = this.result;
+                                                    if (prq.readAs === 'json') {
+                                                        result = JSON.parse(result);
+                                                    }
+                                                    return resolve(result);
                                                 };
                                                 reader.onerror = reject;
-                                                if (prq.readAs === 'text') {
+                                                if ((prq.readAs === 'text') || (prq.readAs === 'json')) {
                                                     reader.readAsText(file);
                                                 } else if (prq.readAs === 'array') {
                                                     reader.readAsArrayBuffer(file);
