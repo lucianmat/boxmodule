@@ -877,8 +877,8 @@ function _runApp() {
 
             Parse.serverURL = resp.serverURL ? resp.serverURL :
                 (window.location && window.location.hostname === 'localhost' ?
-                    'http://businessbox.omg/api/' :
-                    'https://businessbox.pro/api/');
+                   (resp.server && resp.server.developmentURL ?  resp.server.developmentURL :  'http://businessbox.omg/api/') :
+                    ( resp.server && resp.server.productionURL? resp.server.productionURL : 'https://businessbox.pro/api/'));
 
 
             var startParams = {};
