@@ -416,6 +416,130 @@ var boxModule = {
             }
         },
         file: {
+            upload : function (imageUri, options, onProgresscb ) {
+                return new Promise(function (resolve, reject) {
+                    window.resolveLocalFileSystemURL(imageUri, function (file) {
+                        var ctp = 'application/octet-stream',
+                         oupl = {
+                            role: 'attachment',
+                            name: file.name
+                        };
+                        options = options || {};
+                       Framework7.utils.extend(oupl, options.data || {});
+
+                       if (!oupl.contentType) {
+                            var ext =   file.name.split('.').pop().toLowerCase();
+                            if (['jpg','png','jpeg'].indexOf(ext) !== -1) {
+                                ctp = 'image/' + ext;
+                            }
+                            oupl.contentType = ctp;
+                       }
+                       return Parse.Cloud.run('createPresignedPost', oupl)
+                        .then(function (sgData) {
+                            var po;
+                            if (sgData.file) {
+                                sgData.file.className = sgData.file.className || 'Files';
+                                po = Parse.Object.fromJSON(sgData.file);
+                            }
+                            
+                            return Framework7.file._upload(file, 
+                                    {data : sgData.fields, 
+                                    url : sgData.url,
+                                    mimeType : oupl.contentType}, onProgresscb)
+                                .then(function (ri) {
+                                    return new Promise(function (resolve, reject) {
+                                        file.getMetadata(function (meta) {
+                                            if (meta.lastModifiedDate) {
+                                                po.set('lastModifiedDate', meta.lastModifiedDate);
+                                            }
+                                            if (meta.modificationTime) {
+                                                po.set('lastModifiedDate', meta.modificationTime);
+                                            }
+                                            if (meta.size) {
+                                                po.set('size', meta.size);
+                                            }
+                                            if (sgData.fields.ACL === 'public-read') {
+                                                po.set('url', sgData.url + '/' + sgData.fields.key);
+                                            }
+                                            if (options.extra) {
+                                                for(var vkk in options.extra) {
+                                                    po.set(vkk, options.extra[vkk]);
+                                                }
+                                            }
+                                            return po.save().then(resolve,reject);
+                                        }, reject);
+                                    });
+                                  
+                                })
+                                .then(resolve, reject);
+                        })
+                        .catch(reject);
+                    }, reject);
+                });
+                
+            },
+            _upload: function (fileEntry, options, onProgresscb) {
+                if (!fileEntry || typeof fileEntry.file !== 'function') {
+                    return Parse.Promise.reject({ message: 'FileEntry parameter missing' });
+                }
+                options = options || {};
+                options.mimeType = options.mimeType || 'application/octet-stream';
+                options.headers = options.headers || {};
+                options.data = options.data || {};
+             
+                options.url = options.url || (Parse.serverURL + 'storage/upload');
+    
+                return new Promise(function (resolve, reject) {
+                    fileEntry.file(function (file) {
+                            var reader = new FileReader();
+    
+                            reader.onloadend = function () {
+                                 var blob = new Blob([new Uint8Array(this.result)], { type: options.mimeType }),
+                                    formData = new FormData();
+                              
+                                for (var hdr in options.data) {
+                                    formData.append(hdr, options.data[hdr]);
+                                }
+                                formData.append('file', blob, fileEntry.name);
+
+                                var vq = new app.modules.request.proto.request({url : options.url, 
+                                    method : 'POST',
+                                    data : formData,
+                                    processData  : true,
+                                    crossDomain : true,
+                                    contentType : options.contentType  || 'multipart/form-data',
+                                    success : function (fr) {
+                                        resolve(fr);
+                                    },
+                                    error : function (err) {
+                                        reject(err);
+                                    }
+                                    });
+
+                                if (vq.upload && onProgresscb) {
+                                    if (typeof vq.upload.onprogress !== 'undefined') {
+                                        vq.upload.onprogress = function (evt) {
+                                            if (evt.lengthComputable) {
+                                                onProgresscb(evt.loaded, evt.total, Math.floor((evt.loaded / evt.total) * 100));
+                                            }
+                                        };
+                                    } else {
+                                        vq.upload.addEventListener('progress', function (evt) {
+                                            if (evt.lengthComputable) {
+                                                onProgresscb(evt.loaded, evt.total, Math.floor((evt.loaded / evt.total) * 100));
+                                            }
+                                        }, false);
+                                    }
+                                }
+                                if (!vq.upload && onProgresscb) {
+                                    onProgresscb(-1);
+                                }
+                            };
+                            reader.readAsArrayBuffer(file);
+                       
+                    }, reject);
+                });
+            },
             useFs: false,
             // https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFlags 
             writeFile: function (path, data, options) {
