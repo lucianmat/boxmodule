@@ -18,15 +18,18 @@ if (!appSession) {
 
 var appDb = {
     getItem: function (key) {
-        return Parse.CoreManager.getStorageController().async ?
+        return (Parse.CoreManager.getStorageController().async ?
             Parse.Storage.getItemAsync(key) :
-            Promise.resolve(Parse.Storage.getItem(key));
+            Promise.resolve(Parse.Storage.getItem(key)))
+                .then(function (ri) {
+                    return ri ? JSON.parse(ri) : ri;
+                });
     },
     setItem: function (key, val) {
         if (Parse.CoreManager.getStorageController().async) {
-            return Parse.Storage.setItemAsync(key, val);
+            return Parse.Storage.setItemAsync(key, JSON.stringify(val));
         }
-        Parse.Storage.setItem(key, val);
+        Parse.Storage.setItem(key, JSON.stringify(val));
         return Promise.resolve();
     }
 };
@@ -1095,4 +1098,4 @@ boxModule.static.localStorage.getItem('currentApp')
             }
         }
         _runApp();
-    });
+    }); 
