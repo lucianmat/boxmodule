@@ -202,17 +202,17 @@ function _inDebug() {
 var _hasi18n = false;
 
 if (typeof i18next !== 'undefined') {
-    _hasi18n = true;
-    Template7.registerHelper('i18n', function (key, options) {
+    _hasi18n = true; 
+    Framework7.Template7.registerHelper('i18n', function (key, options) {
         return i18next.t(key);
     });
-    Template7.registerHelper('i18np', function (key, count, options) {
+    Framework7.Template7.registerHelper('i18np', function (key, count, options) {
         return i18next.t(key, { count: count || 1 });
     });
-    Template7.registerHelper('i18nc', function (key, context, options) {
+    Framework7.Template7.registerHelper('i18nc', function (key, context, options) {
         return i18next.t(key, { context: context || 'male' });
     });
-    Template7.registerHelper('i18ncp', function (key, context, count, options) {
+    Framework7.Template7.registerHelper('i18ncp', function (key, context, count, options) {
         return i18next.t(key, { context: context || 'male', count: count || 1 });
     });
 }
