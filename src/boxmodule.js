@@ -48,12 +48,22 @@ function reportImage(url) {
     });
 }
 
+
+function _reportTrace(stackInfo) {
+    return Framework7.isTraceEnabled()
+        .then(function (rd) {
+            if (rd) {
+                _reportTrace_int(stackInfo);
+            }
+        });
+}
+
 /**
 * 
 * 
 * @param {any} stackInfo
 */
-function _reportTrace(stackInfo) {
+function _reportTrace_int(stackInfo) {
 
 
     /**
@@ -407,7 +417,7 @@ var boxModule = {
         localStorage: {
             getItem: function (ck) {
                 var vp = localStorage.getItem(ck);
-                return Promise.resolve(vp);
+                return Promise.resolve(JSON.parse(vp||'undefined'));
             },
             setItem: function (ck, vl) {
                 localStorage.setItem(ck, vl);
@@ -829,61 +839,77 @@ var boxModule = {
                 _reportTrace(ex);
             }
         },
+        isTraceEnabled : function() {
+            return Framework7.localStorage.getItem('traceEnabled');
+        },
+        setTraceEnabled : function (vl) {
+            return Framework7.localStorage.setItem('traceEnabled', !!vl);
+        },
         analitycs: function (name, dimensions, localStore) {
-
-            return Parse.User.currentAsync()
-                .then(function (usr) {
-                    var key = "analitycs",
-                        user = usr ? usr.id : false;
-
-                    dimensions = dimensions || {};
-                    dimensions.sessionId = boxModule.static.sessionId;
-                    dimensions.registered = (new Date()).toString();
-                    if (user) {
-                        dimensions.user = user;
+            return Framework7.isTraceEnabled()
+                .then(function (y) {
+                    if (!y) {
+                        return Promise.resolve();
                     }
 
-                    return Framework7.localStorage.getItem(key)
-                        .then(function (lri) {
-                            var tst = lri || {};
-                            tst[name] = tst[name] || [];
+                    return Parse.User.currentAsync()
+                        .then(function (usr) {
+                            var key = "analitycs",
+                                user = usr ? usr.id : false;
 
-                            tst[name].push(dimensions);
-                            if (localStore || !app || !app.initialized) {
-                                return Framework7.localStorage.setItem(key, tst);
+                            dimensions = dimensions || {};
+                            dimensions.sessionId = boxModule.static.sessionId;
+                            dimensions.registered = (new Date()).toString();
+                            if (user) {
+                                dimensions.user = user;
                             }
-                            return appDb.getItem(key)
-                                .then(function (rzs) {
-                                    var postData = {},
-                                        cntr = 0,
-                                        i,
-                                        ri = rzs || {};
 
-                                    for (i in lri) {
-                                        ri[i] = ri[i] || [];
-                                        ri[i] = ri[i].concat(lri[i]);
-                                        postData[i] = JSON.stringify(ri[i]);
-                                        cntr = cntr + postData[i].length;
-                                    }
+                            return Framework7.localStorage.getItem(key)
+                                .then(function (lri) {
+                                    var tst = lri || {};
+                                    tst[name] = tst[name] || [];
 
-                                    if (!app.onLine || (cntr < 1024)) {
-                                        return appDb.setItem(key, ri);
+                                    tst[name].push(dimensions);
+                                    if (localStore || !app || !app.initialized) {
+                                        return Framework7.localStorage.setItem(key, tst);
                                     }
-                                    return app.syncInstallation()
-                                        .then(function () {
-                                            return Parse.Analytics.track('bulk', postData);
-                                        })
-                                        .then(function () {
-                                            return Promise.all([Framework7.localStorage.removeItem(key),
-                                            appDb.removeItem(key)]);
-                                        })
-                                        .catch(function () {
-                                            return Promise.all([Framework7.localStorage.removeItem(key),
-                                            appDb.setItem(key, ri)]);
+                                    return appDb.getItem(key)
+                                        .then(function (rzs) {
+                                            var postData = {},
+                                                cntr = 0,
+                                                i,
+                                                ri = rzs || {};
+
+                                            for (i in lri) {
+                                                ri[i] = ri[i] || [];
+                                                ri[i] = ri[i].concat(lri[i]);
+                                                postData[i] = JSON.stringify(ri[i]);
+                                                cntr = cntr + postData[i].length;
+                                            }
+
+                                            if (!app.onLine || (cntr < 1024)) {
+                                                return appDb.setItem(key, ri);
+                                            }
+                                            return app.syncInstallation()
+                                                .then(function () {
+                                                    return Parse.Analytics.track('bulk', postData);
+                                                })
+                                                .then(function () {
+                                                    return Promise.all([Framework7.localStorage.removeItem(key),
+                                                    appDb.removeItem(key)]);
+                                                })
+                                                .catch(function () {
+                                                    return Promise.all([Framework7.localStorage.removeItem(key),
+                                                    appDb.setItem(key, ri)]);
+                                                });
                                         });
                                 });
                         });
                 });
+        },
+        getFeature : function (name) {
+            var fvl = app.params[app.id].features;
+            return name  && fvl ? fvl[name] : fvl;
         }
 
     },
@@ -1003,9 +1029,9 @@ function _runApp() {
             Parse._initialize(resp.appId, resp.javascriptKey);
 
             Parse.serverURL = resp.serverURL ? resp.serverURL :
-                (window.location && window.location.hostname === 'localhost' ?
-                   (resp.server && resp.server.developmentURL ?  resp.server.developmentURL :  'http://businessbox.omg/api/') :
-                    ( resp.server && resp.server.productionURL? resp.server.productionURL : 'https://businessbox.pro/api/'));
+            (window.location && window.location.hostname === 'localhost' ?
+               (resp.server && resp.server.developmentURL ?  resp.server.developmentURL :  'http://businessbox.omg/api/') :
+                ( resp.server && resp.server.productionURL? resp.server.productionURL : 'https://businessbox.pro/api/'));
 
 
             var startParams = {};
@@ -1098,4 +1124,4 @@ boxModule.static.localStorage.getItem('currentApp')
             }
         }
         _runApp();
-    }); 
+    });
