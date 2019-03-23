@@ -417,10 +417,10 @@ var boxModule = {
         localStorage: {
             getItem: function (ck) {
                 var vp = localStorage.getItem(ck);
-                return Promise.resolve(JSON.parse(vp||'undefined'));
+                return Promise.resolve(vp ? JSON.parse(vp): vp);
             },
             setItem: function (ck, vl) {
-                localStorage.setItem(ck, vl);
+                localStorage.setItem(ck, JSON.stringify(vl));
                 return Promise.resolve();
             },
             removeItem: function (ck) {
