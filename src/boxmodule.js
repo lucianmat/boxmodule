@@ -1061,11 +1061,18 @@ function _runApp() {
                         });
                 })
                 .then(function () {
-                    if ((pInst[resp.appId].lng || pInst.lng) && _hasi18n) {
+                    return Framework7.localStorage.getItem('lng');
+                })
+                .then(function (lng) {
+                    lng = lng || pInst[resp.appId].lng || pInst.lng;
+                    if (lng && (typeof moment === 'function') && (moment.locales().indexOf(lng) !== -1)) {
+                        moment.locale(lng);
+                    }
+                    if (lng && _hasi18n) {
                         return new Promise(function (resolve, reject) {
                             var vln = pInst[resp.appId].i18n || pInst.i18n;
                             if (vln) {
-                                vln.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
+                                vln.lng = lng;
                                 i18next.init(vln, function (err, t) {
                                     resolve();
                                 });
@@ -1076,7 +1083,7 @@ function _runApp() {
                                     if (Framework7.file.useFs) {
                                         irdata = JSON.parse(irdata);
                                     }
-                                    irdata.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
+                                    irdata.lng = lng || irdata.lng;
 
                                     i18next.init(irdata, function (err, t) {
                                         resolve();
