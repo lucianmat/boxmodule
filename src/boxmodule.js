@@ -810,6 +810,16 @@ var boxModule = {
                 }).open();
                 return Promise.resolve(true);
             }
+            if (err.message && ([141,142,139,137,125,123, 121, 111, 107, 106, 104, 103].indexOf(err.code) !== -1)) {
+                app.notification.create({
+                    title: app.name,
+                    icon: '<i class="fa fa-bun color-red"></i>',
+                    text: err.message,
+                    closeOnClick: true,
+                    closeTimeout: 5000
+                }).open();
+                return options.keepError ? Promise.reject(err) : Promise.resolve(false);
+            }
             return options.keepError ? Promise.reject(err) : Promise.resolve(false);
         },
         report: function (ex, showToUser) {
