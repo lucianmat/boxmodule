@@ -294,7 +294,7 @@ var boxModule = {
                                         return Promise.resolve(self.user);
                                     }, function (err) {
                                         _reportTrace(err);
-                                        return Promise.resolve((err && err.code !== 100) || force ? undefined : user);
+                                        return Promise.resolve((err && err.code !== 100  && err.code !== 107 && err.code !== 124) || force ? undefined : user);
                                     });
                             });
 
