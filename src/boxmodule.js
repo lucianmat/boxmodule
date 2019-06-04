@@ -239,6 +239,150 @@ var boxModule = {
         throttlePromise: _throttlePromise
     },
     proto: {
+        registerPushNotifications: function () {
+            var self = this;
+
+            if (typeof PushNotification === 'undefined') {
+                return Promise.resolve(false);
+            }
+
+            if (this.pushController) {
+                return Promise.resolve(true);
+            }
+            return Parse.Storage.getItemAsync('box.pushnotifications')
+                .then(function (pushRequested) {
+                    return new Promise(function (resolve, reject) {
+                        PushNotification.hasPermission(function (data) {
+                            if (!pushRequested || data.isEnabled) {
+                                self.pushController = PushNotification.init({
+                                    android: {},
+                                    ios: {
+                                        alert: true,
+                                        badge: true
+                                    },
+                                    browser: {}
+                                });
+
+
+                                self.pushController.on('registration', self.pushNotificationRegistered.bind(self));
+                                self.pushController.on('notification', self.receivedPushNotification.bind(self));
+                                self.pushController.on('error', function (err) {
+                                    if (app) {
+                                        app.report(err);
+                                    }
+                                });
+                                if (!pushRequested) {
+                                    Parse.Storage.setItemAsync('box.pushnotifications', (new Date()).toString());
+                                }
+                                //   self._pushNotificationSync();
+                                app.emit('pushInited', data.isEnabled);
+                                return resolve(data.isEnabled);
+                            }
+                            return resolve(false);
+                        });
+                    });
+                });
+
+        },
+        pushNotificationRegistered: function (data) {
+            var self = this;
+            return Parse.Storage.getItemAsync('box.pushRegId')
+                .then(function (lastRegId) {
+                    Framework7.log('push reg', data);
+                    if (data &&
+                        data.registrationId &&
+                        lastRegId !== data.registrationId) {
+
+                        self.syncInstallation({ deviceToken: data.registrationId })
+                            .then(function () {
+                                // TODO: on error fail to register push, retry ?
+                                Parse.Storage.setItemAsync('box.pushRegId', data.registrationId);
+                            });
+                    }
+                    self.emit('pushRegistered', data);
+                });
+
+        },
+        receivedPushNotification: function (data) {
+            var self = this;
+
+            Framework7.log('push received', data);
+            if (data && data.additionalData) {
+
+                if (data.additionalData.foreground) {
+                    this.notification.create({
+                        icon: '<i class="fa fa-bell"></i>',
+                        title: this.name,
+                        titleRightText: 'now',
+                        subtitle: data.title || data.additionalData.title,
+                        text: data.message,
+                        closeTimeout: 15000,
+                    }).open();
+
+                    //  self._pushNotificationSync();
+                    // send push readed, and check for navigator
+                }
+            }
+            data.count = parseInt(data.count) || 0;
+            self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, data.count);
+
+            return appDb.getItem('pushQueue')
+                .then(function (pq) {
+                    var tst = JSON.parse(pq || '[]');
+                    data.received = Framework7.utils.now();
+                    tst.push(data);
+                    return appDb.setItem('pushQueue', JSON.stringify(tst))
+                        .then(function () {
+
+                            if (data.additionalData &&
+                                (data.additionalData.foreground || data.additionalData.coldstart) &&
+                                !app.appInBackground) {
+
+                                return app.syncUpdate({
+                                    pushNotifications: _.map(tst, function (ti) {
+                                        var rz = ti.additionalData || {};
+                                        rz.received = ti.received;
+                                        rz.count = ti.count;
+                                        return rz;
+                                    })
+                                })
+                                    .then(function (scs) {
+                                        var toOpen = {}, tsp;
+                                        if (!scs) {
+                                            if (data.additionalData &&
+                                                data.additionalData.openUrl) {
+                                                tsp = data.additionalData.openUrl.split(':');
+                                                toOpen.url = tsp[1];
+
+                                                toOpen.route = {};
+                                                toOpen.route[tsp[0]] = tsp[1];
+
+                                                app.view.current.router.navigate(toOpen, { hash: "top", context: data.additionalData });
+                                                data.additionalData.processed = true;
+                                                var tst2 = JSON.parse(pq || '[]');
+                                                tst2.push(data);
+                                                appDb.setItem('pushQueue', JSON.stringify(tst2));
+                                            }
+                                            return;
+                                        } else if (scs.openUrl) {
+                                            tsp = scs.openUrl.split(':');
+
+                                            if ((typeof scs.count !== 'undefined') && app.pushController && app.pushController.setApplicationIconBadgeNumber) {
+                                                app.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, scs.count);
+                                            }
+
+                                            toOpen.url = tsp[1];
+
+                                            toOpen.route = {};
+                                            toOpen.route[tsp[0]] = tsp[1];
+                                            app.view.current.router.navigate(toOpen, { hash: "top", context: scs.additionalData || {} });
+                                        }
+                                    });
+                            }
+                        });
+                });
+
+        },
         connectionState: function (force) {
             return _throttlePromise('connectionState', 1000, function () {
                 return new Promise(function (resolve, reject) {
@@ -294,7 +438,7 @@ var boxModule = {
                                         return Promise.resolve(self.user);
                                     }, function (err) {
                                         _reportTrace(err);
-                                        return Promise.resolve((err && err.code !== 100  && err.code !== 107 && err.code !== 124) || force ? undefined : user);
+                                        return Promise.resolve((err && err.code !== 100) || force ? undefined : user);
                                     });
                             });
 
@@ -493,7 +637,7 @@ var boxModule = {
             },
             _upload: function (fileEntry, options, onProgresscb) {
                 if (!fileEntry || typeof fileEntry.file !== 'function') {
-                    return Parse.Promise.reject({ message: 'FileEntry parameter missing' });
+                    return Promise.reject({ message: 'FileEntry parameter missing' });
                 }
                 options = options || {};
                 options.mimeType = options.mimeType || 'application/octet-stream';
@@ -810,16 +954,6 @@ var boxModule = {
                 }).open();
                 return Promise.resolve(true);
             }
-            if (err.message && ([141,142,139,137,125,123, 121, 111, 107, 106, 104, 103].indexOf(err.code) !== -1)) {
-                app.notification.create({
-                    title: app.name,
-                    icon: '<i class="fa fa-bun color-red"></i>',
-                    text: err.message,
-                    closeOnClick: true,
-                    closeTimeout: 5000
-                }).open();
-                return options.keepError ? Promise.reject(err) : Promise.resolve(false);
-            }
             return options.keepError ? Promise.reject(err) : Promise.resolve(false);
         },
         report: function (ex, showToUser) {
@@ -940,6 +1074,14 @@ var boxModule = {
                     }
                 })
                 .then(function () {
+                    return Framework7.localStorage.getItem('box.pushRegId')
+                        .then(function (prg) {
+                            if (prg) {
+                                self.registerPushNotifications();
+                            }
+                        });
+                })
+                .then(function () {
 
                     Parse.User._registerAuthenticationProvider({
                         getAuthType: function () { return 'anonymous'; },
@@ -947,7 +1089,8 @@ var boxModule = {
                     });
 
                     if ((self.params && !self.params.keepSplashScreen) &&
-                        navigator.splashscreen && (typeof navigator.splashscreen.hide === 'function')) {
+                        navigator.splashscreen && 
+                        (typeof navigator.splashscreen.hide === 'function')) {
                         navigator.splashscreen.hide();
                     }
                     self.emit('ignited');
@@ -1071,18 +1214,11 @@ function _runApp() {
                         });
                 })
                 .then(function () {
-                    return Framework7.localStorage.getItem('lng');
-                })
-                .then(function (lng) {
-                    lng = lng || pInst[resp.appId].lng || pInst.lng;
-                    if (lng && (typeof moment === 'function') && (moment.locales().indexOf(lng) !== -1)) {
-                        moment.locale(lng);
-                    }
-                    if (lng && _hasi18n) {
+                    if ((pInst[resp.appId].lng || pInst.lng) && _hasi18n) {
                         return new Promise(function (resolve, reject) {
                             var vln = pInst[resp.appId].i18n || pInst.i18n;
                             if (vln) {
-                                vln.lng = lng;
+                                vln.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
                                 i18next.init(vln, function (err, t) {
                                     resolve();
                                 });
@@ -1093,7 +1229,7 @@ function _runApp() {
                                     if (Framework7.file.useFs) {
                                         irdata = JSON.parse(irdata);
                                     }
-                                    irdata.lng = lng || irdata.lng;
+                                    irdata.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
 
                                     i18next.init(irdata, function (err, t) {
                                         resolve();
