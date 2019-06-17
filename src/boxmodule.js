@@ -31,6 +31,20 @@ var appDb = {
         }
         Parse.Storage.setItem(key, JSON.stringify(val));
         return Promise.resolve();
+    },
+    removeItem : function (key) {
+        if (Parse.CoreManager.getStorageController().async) {
+            return Parse.Storage.removeItemAsync(key);
+        }
+        Parse.Storage.removeItem(key);
+        return Promise.resolve();
+    },
+    _clear : function () {
+        if (Parse.CoreManager.getStorageController().async) {
+            return Parse.Storage._clear();
+        }
+        Parse.Storage._clear();
+        return Promise.resolve();
     }
 };
 
@@ -339,7 +353,7 @@ var boxModule = {
                                 !app.appInBackground) {
 
                                 return app.syncUpdate({
-                                    pushNotifications: _.map(tst, function (ti) {
+                                    pushNotifications: tst.map(function (ti) {
                                         var rz = ti.additionalData || {};
                                         rz.received = ti.received;
                                         rz.count = ti.count;
