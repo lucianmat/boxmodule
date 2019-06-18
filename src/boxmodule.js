@@ -289,7 +289,7 @@ var boxModule = {
                                     Parse.Storage.setItemAsync('box.pushnotifications', (new Date()).toString());
                                 }
                                 //   self._pushNotificationSync();
-                                app.emit('pushInited', data.isEnabled);
+                                app.emit('push.inited', data.isEnabled);
                                 return resolve(data.isEnabled);
                             }
                             return resolve(false);
@@ -300,7 +300,7 @@ var boxModule = {
         },
         pushNotificationRegistered: function (data) {
             var self = this;
-            return Parse.Storage.getItemAsync('box.pushRegId')
+            return appDb.getItem('box.pushRegId')
                 .then(function (lastRegId) {
                     Framework7.log('push reg', data);
                     if (data &&
@@ -310,12 +310,22 @@ var boxModule = {
                         self.syncInstallation({ deviceToken: data.registrationId })
                             .then(function () {
                                 // TODO: on error fail to register push, retry ?
-                                Parse.Storage.setItemAsync('box.pushRegId', data.registrationId);
+                                appDb.setItem('box.pushRegId', data.registrationId);
                             });
                     }
-                    self.emit('pushRegistered', data);
+                    self.emit('push.registered', data);
                 });
 
+        },
+        unregisterPushNotification : function () {
+            if (app && app.pushController) {
+                app.pushController.unregister(function () {
+                    appDb.removeItem('box.pushRegId')
+                        .then(function () {
+                            app.emit('push.unregistered')
+                        })
+                }, function () {});
+            }
         },
         receivedPushNotification: function (data) {
             var self = this;
@@ -338,6 +348,8 @@ var boxModule = {
                 }
             }
             data.count = parseInt(data.count) || 0;
+            self.emit('push.received', data);
+            
             self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, data.count);
 
             return appDb.getItem('pushQueue')
@@ -396,6 +408,16 @@ var boxModule = {
                         });
                 });
 
+        },
+        setPushNotificationBadge : function (count) {
+            if (app.pushController) {
+                app.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, count);
+            }
+        },
+        isPushRegistered : function () {
+            return appDb.getItem('box.pushRegId').then(function (tz) {
+                return !!tz;
+            })
         },
         connectionState: function (force) {
             return _throttlePromise('connectionState', 1000, function () {
@@ -1088,7 +1110,7 @@ var boxModule = {
                     }
                 })
                 .then(function () {
-                    return Framework7.localStorage.getItem('box.pushRegId')
+                    return appDb.getItem('box.pushRegId')
                         .then(function (prg) {
                             if (prg) {
                                 self.registerPushNotifications();
