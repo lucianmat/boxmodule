@@ -333,11 +333,12 @@ var boxModule = {
             Framework7.log('push received', data);
             if (data && data.additionalData) {
 
-                if (data.additionalData.foreground) {
+                if (data.additionalData.foreground && 
+                        (data.title || data.additionalData.title || data.message)) {
                     this.notification.create({
                         icon: '<i class="fa fa-bell"></i>',
                         title: this.name,
-                        titleRightText: 'now',
+                        titleRightText: Framework7.i18n.t('now'),
                         subtitle: data.title || data.additionalData.title,
                         text: data.message,
                         closeTimeout: 15000,
@@ -413,6 +414,7 @@ var boxModule = {
             if (app.pushController) {
                 app.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, count);
             }
+            
         },
         isPushRegistered : function () {
             return appDb.getItem('box.pushRegId').then(function (tz) {
