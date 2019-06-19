@@ -322,7 +322,9 @@ var boxModule = {
                 app.pushController.unregister(function () {
                     appDb.removeItem('box.pushRegId')
                         .then(function () {
-                            app.emit('push.unregistered')
+                            delete app.pushController;
+                            app.syncInstallation({ deviceToken: null });
+                            app.emit('push.unregistered');
                         })
                 }, function () {});
             }
@@ -511,7 +513,11 @@ var boxModule = {
 
                                     if (data) {
                                         for (i in data) {
-                                            instData.set(i, data[i]);
+                                            if (typeof data[i] === 'undefined') { 
+                                                instData.unset(i);
+                                            } else {
+                                                instData.set(i, data[i]);
+                                            }
                                         }
                                     }
                                     instData.set('installationId', instid);
@@ -983,6 +989,7 @@ var boxModule = {
                 return options.keepError ? Promise.reject(err) : Promise.resolve(true);
             }
             if (err.code === 209) {
+                //TODO : reloghin !! 
                 app.notification.create({
                     title: app.name,
                     icon: '<i class="fa fa-bun color-red"></i>',
