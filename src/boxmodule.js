@@ -1263,8 +1263,11 @@ function _runApp() {
                         return new Promise(function (resolve, reject) {
                             var vln = pInst[resp.appId].i18n || pInst.i18n;
                             if (vln) {
-                                vln.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
+                                vln.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng || document.documentElement.lang;
                                 i18next.init(vln, function (err, t) {
+                                    if ((typeof moment !== 'undefined') && (typeof moment.locale === 'function')) {
+                                        moment.locale(vln.lng);
+                                    }
                                     resolve();
                                 });
                                 return;
@@ -1274,9 +1277,12 @@ function _runApp() {
                                     if (Framework7.file.useFs) {
                                         irdata = JSON.parse(irdata);
                                     }
-                                    irdata.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng;
+                                    irdata.lng = pInst[resp.appId].lng || pInst.lng || irdata.lng || document.documentElement.lang;
 
                                     i18next.init(irdata, function (err, t) {
+                                        if ((typeof moment !== 'undefined') && (typeof moment.locale === 'function')) {
+                                            moment.locale(irdata.lng);
+                                        }
                                         resolve();
                                     });
                                 })
