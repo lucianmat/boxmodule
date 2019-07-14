@@ -228,16 +228,16 @@ var _hasi18n = false;
 if (typeof i18next !== 'undefined') {
     _hasi18n = true; 
     Framework7.Template7.registerHelper('i18n', function (key, options) {
-        return i18next.t(key);
+        return i18next.t(key) || key;
     });
     Framework7.Template7.registerHelper('i18np', function (key, count, options) {
-        return i18next.t(key, { count: count || 1 });
+        return i18next.t(key, { count: count || 1 }) || key;
     });
     Framework7.Template7.registerHelper('i18nc', function (key, context, options) {
-        return i18next.t(key, { context: context || 'male' });
+        return i18next.t(key, { context: context || 'male' }) || key;
     });
     Framework7.Template7.registerHelper('i18ncp', function (key, context, count, options) {
-        return i18next.t(key, { context: context || 'male', count: count || 1 });
+        return i18next.t(key, { context: context || 'male', count: count || 1 }) || key;
     });
 }
 
