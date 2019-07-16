@@ -253,6 +253,35 @@ var boxModule = {
         throttlePromise: _throttlePromise
     },
     proto: {
+        imageToCacheSrc : function(srctxt) {
+            return (srctxt|| '').replace(/<img([^>]*)\ssrc=(['"])(https:\/\/)([^\2]+)\2/gi, "<img$1 onerror=\"app.imageError(this)\" onload=\"app.imageLoaded(this)\" src=$2https://$4$2");
+        },
+        fetchImageLocal : function (isrc, localPath) {
+            return fetch(isrc, {method : 'GET'})
+                .then(function (resp) {
+                    return resp.blob();
+                })
+                .then(function (rd) {
+                    var fn = localPath || isrc.split('/').slice(-4).join('_');
+                    return Framework7.file.writeFile(fn, rd)
+                        .then(function (agff) {
+                            var lcn = agff.toInternalURL();
+                            this.emit('imageFetched', isrc, lcn);
+                            return lcn;
+                        });
+                })
+                .catch(function () {
+                    // just ignore ?
+                });
+        },
+        imageLoaded : function (img) {
+            this.emit('imageLoaded', img);
+            this.fetchImageLocal(Dom7(img).attr('src'));
+        },
+        imageError : function (img) {
+            Dom7(img).hide();
+            this.emit('imageError', img);
+        },
         registerPushNotifications: function () {
             var self = this;
 
@@ -1126,7 +1155,7 @@ var boxModule = {
                             }
                         });
                 })
-                .then(function () {
+               .then(function () {
 
                     Parse.User._registerAuthenticationProvider({
                         getAuthType: function () { return 'anonymous'; },
