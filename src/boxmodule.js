@@ -241,7 +241,8 @@ if (typeof i18next !== 'undefined') {
     });
 }
 
-var boxModule = {
+var imgLoadH = {},
+    boxModule = {
     name: 'box-module',
     params: {
         analitycs: {
@@ -257,6 +258,9 @@ var boxModule = {
             return (srctxt|| '').replace(/<img([^>]*)\ssrc=(['"])(https:\/\/)([^\2]+)\2/gi, "<img$1 onerror=\"app.imageError(this)\" onload=\"app.imageLoaded(this)\" src=$2https://$4$2");
         },
         fetchImageLocal : function (isrc, localPath) {
+            var self = this;
+            imgLoadH[isrc] = true;
+            
             return fetch(isrc, {method : 'GET'})
                 .then(function (resp) {
                     return resp.blob();
@@ -266,17 +270,23 @@ var boxModule = {
                     return Framework7.file.writeFile(fn, rd)
                         .then(function (agff) {
                             var lcn = agff.toInternalURL();
-                            this.emit('imageFetched', isrc, lcn);
+                            delete imgLoadH[isrc];
+                            self.emit('imageFetched', isrc, lcn);
                             return lcn;
                         });
                 })
                 .catch(function () {
+                    delete imgLoadH[isrc];
                     // just ignore ?
                 });
         },
         imageLoaded : function (img) {
-            this.emit('imageLoaded', img);
-            this.fetchImageLocal(Dom7(img).attr('src'));
+            var vs = Dom7(img).attr('src');
+            if (!imgLoadH[vs]) {
+                imgLoadH[vs] = true;
+                this.emit('imageLoaded', img);
+                this.fetchImageLocal(vs);
+            }
         },
         imageError : function (img) {
             Dom7(img).hide();
