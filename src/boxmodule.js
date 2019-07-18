@@ -254,11 +254,16 @@ var imgLoadH = {},
         throttlePromise: _throttlePromise
     },
     proto: {
-        imageToCacheSrc : function(srctxt) {
-            return (srctxt|| '').replace(/<img([^>]*)\ssrc=(['"])(https:\/\/)([^\2]+)\2/gi, "<img$1 onerror=\"app.imageError(this)\" onload=\"app.imageLoaded(this)\" src=$2https://$4$2");
+        imageToCacheSrc : function(srctxt, key) {
+            return (srctxt|| '').replace(/<img([^>]*)\ssrc=(['"])(https:\/\/)([^\2]+)\2/gi, "<img$1 data-img-key=\""+ (key || 'idk' + Framework7.utils.id()) + "\" onerror=\"app.imageError(this)\" onload=\"app.cacheImage(this)\" src=$2https://$4$2");
         },
         fetchImageLocal : function (isrc, localPath) {
             var self = this;
+
+            if (device && device.platform === 'browser') {
+                return Promise.resolve(isrc);
+            }
+
             imgLoadH[isrc] = true;
             
             return fetch(isrc, {method : 'GET'})
@@ -267,6 +272,7 @@ var imgLoadH = {},
                 })
                 .then(function (rd) {
                     var fn = localPath || isrc.split('/').slice(-4).join('_');
+
                     return Framework7.file.writeFile(fn, rd)
                         .then(function (agff) {
                             var lcn = agff.toInternalURL();
@@ -280,12 +286,24 @@ var imgLoadH = {},
                     // just ignore ?
                 });
         },
-        imageLoaded : function (img) {
-            var vs = Dom7(img).attr('src');
+        cacheImage : function (img) {
+            var self = this,
+                $del =  Dom7(img),
+                vs = $del.attr('src'),
+                ds = $del.dataset();
+            
+            self.emit('imageLoaded', img, ds);
             if (!imgLoadH[vs]) {
                 imgLoadH[vs] = true;
-                this.emit('imageLoaded', img);
-                this.fetchImageLocal(vs);
+                ds.src = vs;
+                this.fetchImageLocal(vs, ds.filename? ds.imgKey +'_' + ds.filename : null)
+                .then(function(localPath) {
+                    if (localPath === ds.src) {
+                        return;
+                    }
+                    ds.path = localPath;
+                    self.emit('imageCached', img, ds);
+                })
             }
         },
         imageError : function (img) {
