@@ -292,6 +292,9 @@ var imgLoadH = {},
                 vs = $del.attr('src'),
                 ds = $del.dataset();
             
+            if ((vs||'').toLowerCase().indexOf('http')!==0) {
+                return;
+            }
             self.emit('imageLoaded', img, ds);
             if (!imgLoadH[vs]) {
                 imgLoadH[vs] = true;
@@ -305,6 +308,31 @@ var imgLoadH = {},
                     self.emit('imageCached', img, ds);
                 })
             }
+        },
+        pageToLocalImages :function (src, pageId) {
+            var sel = this;
+            if(!src || !src.length) {return;}
+
+            return Promise.all(src.map(function(fi) {
+                    return sel.fetchImageLocal(fi)
+                            .then(function(rz) {
+                                return {ls :fi , path : rz};
+                            })
+                }))
+                .then(function(rz) {
+                    return Parse.Database.local.get(pageId)
+                            .then(function(rr) {
+                                rz.forEach(function(vv) {
+                                    if(vv.path && (vv.path!== vv.ls)) {
+                                        rr.page = rr.page.replace(new RegExp(vv.ls, 'gi'),vv.path);
+                                    }
+                                });
+                                return Parse.Database.local.save(pageId, rr)
+                                    .then(function () {
+                                        sel.clearPageData(pageId);
+                                    });
+                            });
+                });
         },
         imageError : function (img) {
             Dom7(img).hide();
