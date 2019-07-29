@@ -449,7 +449,7 @@ var imgLoadH = {},
                         .then(function () {
 
                             if (data.additionalData &&
-                                (data.additionalData.foreground || data.additionalData.coldstart) &&
+                                (data.additionalData.foreground || data.additionalData.coldstart) && app.syncUpdate &&
                                 !app.appInBackground) {
 
                                 return app.syncUpdate({
@@ -1226,6 +1226,38 @@ var imgLoadH = {},
                     self.emit('ignited');
                 });
 
+        },
+        pageAfterIn: function (page) {
+            var lr = sessionStorage.getItem('box.referrer'),
+                toR = {},
+                ref = page && page.route && (page.route.url || page.route.path) ? page.route.url || page.route.path : '';
+
+            if (ref) {
+                toR.url = ref;
+                sessionStorage.setItem('box.referrer', ref);
+            } else {
+                sessionStorage.removeItem('box.referrer');
+            }
+
+            if (lr) {
+                toR.referrer = lr;
+            }
+            if (page) {
+                if(page.$navbarEl && page.$navbarEl.length) {
+                    toR.title = page.$navbarEl.text();
+                }
+                if(page.name) {
+                    toR.name = page.name;
+                }
+                if (page.direction) {
+                    toR.direction = page.direction;
+                }
+                if (page.route && !!Object.keys(page.route.params || {}).length) {
+                    toR.params = page.route.params;
+                }
+            }
+
+            Framework7.analitycs('navigate', toR);
         }
     }
 };
