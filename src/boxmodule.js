@@ -1154,28 +1154,31 @@ var imgLoadH = {},
                                                 i,
                                                 ri = rzs || {};
 
-                                            for (i in lri) {
+                                            for (i in tst) {
                                                 ri[i] = ri[i] || [];
-                                                ri[i] = ri[i].concat(lri[i]);
+                                                ri[i] = ri[i].concat(tst[i]);
                                                 postData[i] = JSON.stringify(ri[i]);
                                                 cntr = cntr + postData[i].length;
                                             }
-
-                                            if (!app.onLine || (cntr < 1024)) {
-                                                return appDb.setItem(key, ri);
-                                            }
-                                            return app.syncInstallation()
-                                                .then(function () {
-                                                    return Parse.Analytics.track('bulk', postData);
-                                                })
-                                                .then(function () {
-                                                    return Promise.all([Framework7.localStorage.removeItem(key),
-                                                    appDb.removeItem(key)]);
-                                                })
-                                                .catch(function () {
-                                                    return Promise.all([Framework7.localStorage.removeItem(key),
-                                                    appDb.setItem(key, ri)]);
+                                            return app.connectionState()
+                                                .then(function() {
+                                                    if (!app.onLine || (cntr < 1024)) {
+                                                        return appDb.setItem(key, ri);
+                                                    }
+                                                    return app.syncInstallation()
+                                                        .then(function () {
+                                                            return Parse.Analytics.track('bulk', postData);
+                                                        })
+                                                        .then(function () {
+                                                            return Promise.all([Framework7.localStorage.removeItem(key),
+                                                            appDb.removeItem(key)]);
+                                                        })
+                                                        .catch(function () {
+                                                            return Promise.all([Framework7.localStorage.removeItem(key),
+                                                            appDb.setItem(key, ri)]);
+                                                        });
                                                 });
+                                           
                                         });
                                 });
                         });
@@ -1224,6 +1227,7 @@ var imgLoadH = {},
                         navigator.splashscreen.hide();
                     }
                     self.emit('ignited');
+                    Framework7.analitycs(boxModule.params.analitycs.appOpened);
                 });
 
         },
