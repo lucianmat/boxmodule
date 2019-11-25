@@ -1117,9 +1117,33 @@ var imgLoadH = {},
             return Framework7.localStorage.getItem('traceEnabled');
         },
         setTraceEnabled : function (vl) {
-            return Framework7.localStorage.setItem('traceEnabled', !!vl);
+            return Framework7.localStorage.setItem('traceEnabled', !!vl)
+                .then(function () {
+                    if ((typeof window.FirebasePlugin !== 'undefined') && 
+                    (typeof window.FirebasePlugin.setAnalyticsCollectionEnabled === 'function')) {
+                        window.FirebasePlugin.setAnalyticsCollectionEnabled(!!vl);
+                    }
+                })
         },
         analitycs: function (name, dimensions, localStore) {
+            if ((typeof window.FirebasePlugin !=='undefined') && 
+               (typeof window.FirebasePlugin.logEvent === 'function')) {
+
+                return Framework7.isTraceEnabled()
+                    .then(function (y) {
+                        if (!y) {
+                            return;
+                        }
+                        if ((typeof window.FirebasePlugin.setScreenName === 'function') && (dimensions.title || dimensions.name)) {
+                            window.FirebasePlugin.setScreenName(dimensions.title  || dimensions.name)
+                        }
+
+                        if (name === 'navigate') {
+                            window.FirebasePlugin.logEvent('screen_view', dimensions.title  || dimensions.name);
+                        }
+                    });
+            }
+
             return Framework7.isTraceEnabled()
                 .then(function (y) {
                     if (!y) {
