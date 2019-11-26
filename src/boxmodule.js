@@ -163,6 +163,52 @@ function _reportTrace_int(stackInfo) {
         });
 }
 
+function _debounceFunction(func, wait, immediate) {
+	var timeout;
+	return function() {
+		var context = this, args = arguments;
+		var later = function() {
+			timeout = null;
+			if (!immediate) func.apply(context, args);
+		};
+		var callNow = immediate && !timeout;
+		clearTimeout(timeout);
+		timeout = setTimeout(later, wait);
+		if (callNow) func.apply(context, args);
+	};
+};
+
+function _throttleFunction(func, wait, options) {
+    var context, args, result;
+    var timeout = null;
+    var previous = 0;
+    if (!options) options = {};
+    var later = function() {
+      previous = options.leading === false ? 0 : Date.now();
+      timeout = null;
+      result = func.apply(context, args);
+      if (!timeout) context = args = null;
+    };
+    return function() {
+      var now = Date.now();
+      if (!previous && options.leading === false) previous = now;
+      var remaining = wait - (now - previous);
+      context = this;
+      args = arguments;
+      if (remaining <= 0 || remaining > wait) {
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = null;
+        }
+        previous = now;
+        result = func.apply(context, args);
+        if (!timeout) context = args = null;
+      } else if (!timeout && options.trailing !== false) {
+        timeout = setTimeout(later, remaining);
+      }
+      return result;
+    };
+  };
 
 function _throttlePromise(cnm, tinterval, fn) {
     var args,
@@ -1129,18 +1175,32 @@ var imgLoadH = {},
             if ((typeof window.FirebasePlugin !=='undefined') && 
                (typeof window.FirebasePlugin.logEvent === 'function')) {
 
+                if (name === 'AppOpened') { 
+                    return Promise.resolve(); // no need
+                }
                 return Framework7.isTraceEnabled()
                     .then(function (y) {
                         if (!y) {
                             return;
                         }
-                        if ((typeof window.FirebasePlugin.setScreenName === 'function') && (dimensions.title || dimensions.name)) {
-                            window.FirebasePlugin.setScreenName(dimensions.title  || dimensions.name)
-                        }
+                        return Parse.User.currentAsync()
+                            .then(function (usr) {
 
-                        if (name === 'navigate') {
-                            window.FirebasePlugin.logEvent('screen_view', dimensions.title  || dimensions.name);
-                        }
+                                if (usr &&  usr.id && (typeof window.FirebasePlugin.setUserId === 'function')) {
+                                    window.FirebasePlugin.setUserId(usr.id);
+                                }
+
+                                if ((typeof window.FirebasePlugin.setScreenName === 'function') && dimensions && (dimensions.title || dimensions.name)) {
+                                    window.FirebasePlugin.setScreenName(dimensions.title  || dimensions.name)
+                                }
+        
+                                if (name === 'navigate') {
+                                    window.FirebasePlugin.logEvent('screen_view', { screen_name :  dimensions.title  || dimensions.name});
+                                }
+                                
+                                window.FirebasePlugin.logEvent(name, dimensions);
+                            });
+                      
                     });
             }
 
@@ -1286,7 +1346,11 @@ var imgLoadH = {},
             }
 
             Framework7.analitycs('navigate', toR);
-        }
+        },
+        searchbarSearch : _debounceFunction(function (sbar,query, previousQuery) {
+            Framework7.log(query, previousQuery);
+            Framework7.analitycs('search', { search_term : query});
+        }, 1000)
     }
 };
 
