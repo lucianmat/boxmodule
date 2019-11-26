@@ -63,11 +63,17 @@ function reportImage(url) {
 }
 
 
-function _reportTrace(stackInfo) {
+function _reportTrace(stackInfo, stack) {
+
+    if (window.FirebasePlugin && (typeof window.FirebasePlugin.logError === 'function')) {
+        window.FirebasePlugin.logError(stackInfo, stack);
+        return;
+    }
+
     return Framework7.isTraceEnabled()
         .then(function (rd) {
             if (rd) {
-                _reportTrace_int(stackInfo);
+                _reportTrace_int(stackInfo, stack);
             }
         });
 }
@@ -78,7 +84,6 @@ function _reportTrace(stackInfo) {
 * @param {any} stackInfo
 */
 function _reportTrace_int(stackInfo) {
-
 
     /**
      * 
@@ -106,7 +111,7 @@ function _reportTrace_int(stackInfo) {
     if (console && typeof console.log === 'function') {
         console.log(stackInfo);
     }
-
+    
     return appDb.getItem('errors')
         .then(function (errs) {
             var dbers = errs ? errs.errors : [],
@@ -388,12 +393,33 @@ var imgLoadH = {},
             var self = this;
 
             if (typeof PushNotification === 'undefined') {
-                return Promise.resolve(false);
+                if (typeof window.FirebasePlugin=== 'undefined' ) {
+                    return Promise.resolve(false)
+                 }
+                if (typeof window.FirebasePlugin.getToken === 'function') {
+                    window.FirebasePlugin.getToken(function () {});
+                }
+                if (typeof window.FirebasePlugin.setAutoInitEnabled === 'function') {
+                    window.FirebasePlugin.setAutoInitEnabled(true);
+                }
+
+                if (typeof window.FirebasePlugin.grantPermission === 'function') {
+                    window.FirebasePlugin.grantPermission(function(hasPermission){
+                        if (!hasPermission) {
+                            return;
+                        }
+                    });
+                }
+                if (typeof window.FirebasePlugin.onMessageReceived === 'function') {
+                    window.FirebasePlugin.onMessageReceived(self.receivedPushNotification.bind(self));
+                }
+                return Promise.resolve(true);
             }
 
             if (this.pushController) {
                 return Promise.resolve(true);
             }
+           
             return Parse.Storage.getItemAsync('box.pushnotifications')
                 .then(function (pushRequested) {
                     return new Promise(function (resolve, reject) {
@@ -449,6 +475,13 @@ var imgLoadH = {},
 
         },
         unregisterPushNotification : function () {
+            if (window.FirebasePlugin && (typeof window.FirebasePlugin.setAutoInitEnabled ==='function')) {
+                window.FirebasePlugin.setAutoInitEnabled(false, function(){
+                    window.FirebasePlugin.unregister();
+                    app.emit('push.unregistered');
+                });
+                return Promise.resolve();
+            }
             if (app && app.pushController) {
                 app.pushController.unregister(function () {
                     appDb.removeItem('box.pushRegId')
@@ -468,9 +501,9 @@ var imgLoadH = {},
 
                 if (data.additionalData.foreground && 
                         (data.title || data.additionalData.title || data.message)) {
-                    this.notification.create({
+                    self.notification.create({
                         icon: '<i class="fa fa-bell"></i>',
-                        title: this.name,
+                        title: self.name,
                         titleRightText: Framework7.i18n.t('now'),
                         subtitle: data.title || data.additionalData.title,
                         text: data.message,
@@ -480,11 +513,24 @@ var imgLoadH = {},
                     //  self._pushNotificationSync();
                     // send push readed, and check for navigator
                 }
+            } else if (data && data.messageType === 'notification' && (data.show_notification==='false' || data.show_notification === false)) {
+                self.notification.create({
+                    icon: '<i class="fa fa-bell"></i>',
+                    title: self.name,
+                    titleRightText: Framework7.i18n.t('now'),
+                    subtitle: data.title || '',
+                    text: data.body,
+                    closeTimeout: 15000,
+                }).open();
             }
+
             data.count = parseInt(data.count) || 0;
             self.emit('push.received', data);
+
+            if (self.pushController) {
+                self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, data.count);
+            }
             
-            self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, data.count);
 
             return appDb.getItem('pushQueue')
                 .then(function (pq) {
@@ -1144,7 +1190,7 @@ var imgLoadH = {},
                 })
                     .open();
             }
-            if (ex instanceof Error) {
+            if ((ex instanceof Error) && (typeof TraceKit !== 'undefined')) {
                 try {
                     TraceKit.report(ex);
                 } catch (ex1) {
@@ -1196,6 +1242,7 @@ var imgLoadH = {},
         
                                 if (name === 'navigate') {
                                     window.FirebasePlugin.logEvent('screen_view', { screen_name :  dimensions.title  || dimensions.name});
+                                    return;
                                 }
                                 
                                 window.FirebasePlugin.logEvent(name, dimensions);
@@ -1404,7 +1451,34 @@ function _runApp() {
         _reportTrace(e);
     };
 
-    TraceKit.report.subscribe(_reportTrace);
+    window.onerror = function(errorMsg, url, line, col, error) {
+        var logMessage = errorMsg;
+        var stackTrace = null;
+        
+        var sendError = function(){
+            if (typeof FirebasePlugin !== 'undefined') {
+                FirebasePlugin.logError(logMessage, stackTrace);
+            } 
+            
+        };
+
+        logMessage += ': url='+url+'; line='+line+'; col='+col;
+
+        if ((typeof error === 'object') && (typeof StackTrace !== 'undefined') ){
+            StackTrace.fromError(error).then(function(trace){
+                stackTrace = trace;
+                _reportTrace(logMessage, stackTrace);
+            });
+        }else{
+            _reportTrace(logMessage, stackTrace);
+        }
+    };
+    
+
+    if (typeof TraceKit !== 'undefined') {
+        TraceKit.report.subscribe(_reportTrace);
+    }
+   
     Framework7.file.getContent('config.json')
         .then(function (resp) {
             if (Framework7.file.useFs) {
