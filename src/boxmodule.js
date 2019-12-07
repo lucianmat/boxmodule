@@ -66,7 +66,15 @@ function reportImage(url) {
 function _reportTrace(stackInfo, stack) {
 
     if (window.FirebasePlugin && (typeof window.FirebasePlugin.logError === 'function')) {
-        window.FirebasePlugin.logError(stackInfo, stack);
+        window.FirebasePlugin.logError(stackInfo, stack, function(){
+            console.log('logged:');
+            console.log(stackInfo);
+            console.log(stack);
+        },function(error){
+            console.log('failed logging:', error);
+            console.log(stackInfo);
+            console.log(stack);
+        });
         return;
     }
 
@@ -1320,6 +1328,20 @@ var imgLoadH = {},
             return name  && fvl ? fvl[name] : fvl;
         }
 
+    },
+    clicks : {
+        '.externalclick' : function ($clickedEl, data) {
+            const $clickedLinkEl = $clickedEl.closest('a');
+            const isLink = $clickedLinkEl.length > 0;
+            const url = isLink && $clickedLinkEl.attr('href');
+            if (isLink && url) {
+                const target = $clickedLinkEl.attr('target');
+                if (url  && window.cordova && window.cordova.InAppBrowser && (target === '_system' || target === '_blank')
+                ) {
+                  window.cordova.InAppBrowser.open(url, target, 'usewkwebview=yes');
+                }
+            }
+        }
     },
     on: {
         init: function () {
