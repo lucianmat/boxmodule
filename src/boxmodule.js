@@ -973,49 +973,52 @@ var imgLoadH = {},
             getContent: function (path, options) {
                 return new Promise(function (resolve, reject) {
                     var prq;
-                    if (Framework7.file.useFs && (!device|| (device && device.platform !== 'browser')) ) {
-                        prq = Framework7.utils.extend({ rootFs: cordova.file.dataDirectory, readAs: 'text' }, options || {});
+                    if (Framework7.file.useFs && 
+                        ((typeof device === 'undefined') || (device && device.platform !== 'browser')) ) {
+                        
+                            prq = Framework7.utils.extend({ rootFs: cordova.file.dataDirectory, readAs: 'text' }, options || {});
 
-                        window.resolveLocalFileSystemURL(prq.rootFs, function (dentry) {
-                            Promise.resolve()
-                                .then(function () {
-                                    if (prq.rootFs === cordova.file.applicationDirectory) {
-                                        path = 'www/' + path;
-                                    }
-                                    if (path.indexOf('/') === -1) {
-                                        return dentry;
-                                    }
-                                    return new Promise(function (pir, prj) {
-                                        dentry.getDirectory(path.slice(0, path.lastIndexOf('/')), { exclusive: false }, pir, prj);
-                                    });
-                                })
-                                .then(function (den) {
-                                    den.getFile(path.slice(path.lastIndexOf('/') + 1),
-                                        { exclusive: false },
-                                        function (fen) {
-                                            fen.file(function (file) {
-                                                var reader = new FileReader();
-                                                reader.onloadend = function () {
-                                                    var result = this.result;
-                                                    if (prq.readAs === 'json') {
-                                                        result = JSON.parse(result);
+                            window.resolveLocalFileSystemURL(prq.rootFs, function (dentry) {
+                                Promise.resolve()
+                                    .then(function () {
+                                        if (prq.rootFs === cordova.file.applicationDirectory) {
+                                            path = 'www/' + path;
+                                        }
+                                        if (path.indexOf('/') === -1) {
+                                            return dentry;
+                                        }
+                                        return new Promise(function (pir, prj) {
+                                            dentry.getDirectory(path.slice(0, path.lastIndexOf('/')), { exclusive: false }, pir, prj);
+                                        });
+                                    })
+                                    .then(function (den) {
+                                        den.getFile(path.slice(path.lastIndexOf('/') + 1),
+                                            { exclusive: false },
+                                            function (fen) {
+                                                fen.file(function (file) {
+                                                    var reader = new FileReader();
+                                                    reader.onloadend = function () {
+                                                        var result = this.result;
+                                                        if (prq.readAs === 'json') {
+                                                            result = JSON.parse(result);
+                                                        }
+                                                        return resolve(result);
+                                                    };
+                                                    reader.onerror = reject;
+                                                    if ((prq.readAs === 'text') || (prq.readAs === 'json')) {
+                                                        reader.readAsText(file);
+                                                    } else if (prq.readAs === 'array') {
+                                                        reader.readAsArrayBuffer(file);
+                                                    } else if (prq.readAs === 'url') {
+                                                        reader.readAsDataURL(file);
+                                                    } else {
+                                                        reader.readAsBinaryString(file);
                                                     }
-                                                    return resolve(result);
-                                                };
-                                                reader.onerror = reject;
-                                                if ((prq.readAs === 'text') || (prq.readAs === 'json')) {
-                                                    reader.readAsText(file);
-                                                } else if (prq.readAs === 'array') {
-                                                    reader.readAsArrayBuffer(file);
-                                                } else if (prq.readAs === 'url') {
-                                                    reader.readAsDataURL(file);
-                                                } else {
-                                                    reader.readAsBinaryString(file);
-                                                }
-                                            });
-                                        }, reject);
-                                });
-                        }, reject);
+                                                });
+                                            }, reject);
+                                    });
+                            }, reject);
+                       
                     } else {
                         prq = Framework7.utils.extend({
                             url: path,
@@ -1500,8 +1503,14 @@ function _runApp() {
     if (typeof TraceKit !== 'undefined') {
         TraceKit.report.subscribe(_reportTrace);
     }
-   
-    Framework7.file.getContent('config.json')
+    if (typeof Framework7.__useFs !== 'undefined') {
+        Framework7.file.useFs = Framework7.__useFs;
+    } else {
+        Framework7.file.useFs = true;
+    }
+
+    document.addEventListener("deviceready", function () {
+        Framework7.file.getContent('config.json', {rootFs : cordova.file.applicationDirectory})
         .then(function (resp) {
             if (Framework7.file.useFs) {
                 resp = JSON.parse(resp);
@@ -1577,7 +1586,7 @@ function _runApp() {
                                 });
                                 return;
                             }
-                            Framework7.file.getContent('i18n.json')
+                            Framework7.file.getContent('i18n.json',  {rootFs : cordova.file.applicationDirectory})
                                 .then(function (irdata) {
                                     if (Framework7.file.useFs) {
                                         irdata = JSON.parse(irdata);
@@ -1600,7 +1609,11 @@ function _runApp() {
                 .then(function () {
                     app = new Framework7(pInst);
                 });
+        }, function (cferr) {
+            console.log(cferr);
         });
+    }, false);
+   
 }
 
 Framework7.use(boxModule);
