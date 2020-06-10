@@ -404,24 +404,42 @@ var imgLoadH = {},
                 if (typeof window.FirebasePlugin=== 'undefined' ) {
                     return Promise.resolve(false)
                  }
-                if (typeof window.FirebasePlugin.getToken === 'function') {
-                    window.FirebasePlugin.getToken(function () {});
-                }
-                if (typeof window.FirebasePlugin.setAutoInitEnabled === 'function') {
-                    window.FirebasePlugin.setAutoInitEnabled(true);
-                }
-
-                if (typeof window.FirebasePlugin.grantPermission === 'function') {
-                    window.FirebasePlugin.grantPermission(function(hasPermission){
-                        if (!hasPermission) {
-                            return;
+                 var _pushRequested;
+                 return Parse.Storage.getItemAsync('box.pushnotifications')
+                    .then(function (pushRequested) {
+                        _pushRequested = pushRequested;
+                        return new Promise(function (resolve, reject) {
+                            window.FirebasePlugin.hasPermission(function(hasPerm) {
+                                if (hasPerm) {
+                                    return resolve(true);
+                                 }
+                                window.FirebasePlugin.grantPermission(function(hasPermission){
+                                    if (!hasPermission) {
+                                        return resolve(false);
+                                    }
+                                    window.FirebasePlugin.getToken(function (fcmToken) {
+                                        self.syncInstallation({ deviceToken: fcmToken })
+                                            .then(function () {
+                                                resolve(true);
+                                            })
+                                    });
+                                }); 
+                            });
+                        });
+                    })
+                    .then(function (enbl) {
+                        if (!enbl) {
+                            return enbl;
+                        }
+                        window.FirebasePlugin.setAutoInitEnabled(true);
+                        window.FirebasePlugin.onTokenRefresh(function (fcmToken) {
+                            self.syncInstallation({ deviceToken: fcmToken });
+                        });
+                        
+                        if (typeof window.FirebasePlugin.onMessageReceived === 'function') {
+                            window.FirebasePlugin.onMessageReceived(self.receivedPushNotification.bind(self));
                         }
                     });
-                }
-                if (typeof window.FirebasePlugin.onMessageReceived === 'function') {
-                    window.FirebasePlugin.onMessageReceived(self.receivedPushNotification.bind(self));
-                }
-                return Promise.resolve(true);
             }
 
             if (this.pushController) {
@@ -501,43 +519,77 @@ var imgLoadH = {},
                 }, function () {});
             }
         },
-        receivedPushNotification: function (data) {
+        setBadgeNumber : function (nr) {
             var self = this;
+            if (self.pushController && self.pushController.setApplicationIconBadgeNumber) {
+                self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, nr);
+            } else if (!!window.FirebasePlugin && typeof window.FirebasePlugin.setBadgeNumber === 'function') {
+                window.FirebasePlugin.setBadgeNumber(nr);
+            }
+            return Promise.resolve();
+        },
+        getBadgeNumber : function () {
+            var self = this;
+            return new Promise(function (resolve, reject) {
+                if (self.pushController && self.pushController.getApplicationIconBadgeNumber) {
+                    self.pushController.getApplicationIconBadgeNumber(function (cnt) {
+                        resolve(cnt||0);
+                    });
+                } else if (!!window.FirebasePlugin && typeof window.FirebasePlugin.getBadgeNumber === 'function') {
+                    window.FirebasePlugin.getBadgeNumber(function (cnt) {
+                        resolve(cnt||0);
+                    });
+                }
+            });
+        },
+        receivedPushNotification: function (data) {
+            var self = this,
+                title, body;
+
+            data = data || {};
 
             Framework7.log('push received', data);
-            if (data && data.additionalData) {
+            if(data.title){
+                title = data.title;
+            }else if(data.notification && data.notification.title){
+                title = data.notification.title;
+            }else if(data.aps && data.aps.alert && data.aps.alert.title){
+                title = data.aps.alert.title;
+            } else if (data.data && data.data.notification_title) {
+                title = data.data.notification_title;
+            }
 
-                if (data.additionalData.foreground && 
-                        (data.title || data.additionalData.title || data.message)) {
-                    self.notification.create({
-                        icon: '<i class="fa fa-bell"></i>',
-                        title: self.name,
-                        titleRightText: Framework7.i18n.t('now'),
-                        subtitle: data.title || data.additionalData.title,
-                        text: data.message,
-                        closeTimeout: 15000,
-                    }).open();
+            if(data.body){
+                body = data.body;
+            } else if(data.notification && data.notification.body){
+                body = data.notification.body;
+            } else if(data.aps && data.aps.alert && data.aps.alert.body){
+                body = data.aps.alert.body;
+            } else if (data.data && data.data.notification_body) {
+                body = data.data.notification_body;
+            }
 
-                    //  self._pushNotificationSync();
-                    // send push readed, and check for navigator
-                }
-            } else if (data && data.messageType === 'notification' && (data.show_notification==='false' || data.show_notification === false)) {
+            if ((title || body) && !(data.show_notification==='false' || data.show_notification === false)) {
                 self.notification.create({
                     icon: '<i class="fa fa-bell"></i>',
                     title: self.name,
                     titleRightText: Framework7.i18n.t('now'),
-                    subtitle: data.title || '',
-                    text: data.body,
+                    subtitle: title || '',
+                    text: body,
                     closeTimeout: 15000,
                 }).open();
             }
 
+            if (data.apns && data.apns.payload && data.apns.payload.aps) {
+                data.count = data.count || (data.apns.payload.aps.badge || 0);
+            }
+            if (data.data && data.data.notification_ios_badge) {
+                data.count =  data.count || data.data.notification_ios_badge;
+            }
+
             data.count = parseInt(data.count) || 0;
             self.emit('push.received', data);
-
-            if (self.pushController) {
-                self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, data.count);
-            }
+            self.setBadgeNumber(data.count);
             
 
             return appDb.getItem('pushQueue')
@@ -598,10 +650,7 @@ var imgLoadH = {},
 
         },
         setPushNotificationBadge : function (count) {
-            if (app.pushController) {
-                app.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, count);
-            }
-            
+            app.setBadgeNumber(count);
         },
         isPushRegistered : function () {
             return appDb.getItem('box.pushRegId').then(function (tz) {
