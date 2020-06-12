@@ -2,7 +2,13 @@ var app,
     appSession,
     _lg = 0,
     traceUrl,
+    __currentTouches = {},
+    __eventTouchNames = { touchstart: 'touchstart', touchend: 'touchend' },
     __promisesPromises = {};
+
+if (window.navigator.msPointerEnabled) {
+    __eventTouchNames = { touchstart: 'MSPointerDown', touchend: 'MSPointerUp' };
+}
 
 if (typeof sessionStorage !== 'undefined' &&
     typeof sessionStorage.getItem === 'function') {
@@ -1402,6 +1408,23 @@ var imgLoadH = {},
                 (typeof StatusBar.hide === 'function')) {
                 StatusBar.hide();
             }
+            document.addEventListener(__eventTouchNames.touchstart, function (evt) {
+                var touches = evt.touches || [evt],
+                    touch;
+                for (var i = 0, l = touches.length; i < l; i++) {
+                    touch = touches[i];
+                    __currentTouches[touch.identifier || touch.pointerId] = touch;
+                }
+            }, false);
+
+            document.addEventListener(__eventTouchNames.touchend, function (evt) {
+                var touchCount = Object.keys(currentTouches).length;
+                __currentTouches = {};
+                if (touchCount === 3 || (device && device.isVirtual && touchCount === 2)) {
+                    evt.preventDefault();
+                    self.emit('multitouch');
+                }
+            }, false);
 
             Promise.resolve()
                 .then(function () {
