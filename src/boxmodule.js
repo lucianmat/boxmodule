@@ -1477,7 +1477,10 @@ var imgLoadH = {},
             if (page) {
                 if(page.$navbarEl && page.$navbarEl.length) {
                     toR.title = page.$navbarEl.text();
+                } else if (page.$el.find('.navbar .title').length) {
+                    toR.title = page.$el.find('.navbar .title').text();
                 }
+                
                 if(page.name) {
                     toR.name = page.name;
                 }
