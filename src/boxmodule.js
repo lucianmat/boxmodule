@@ -338,9 +338,14 @@ var imgLoadH = {},
                 .then(function (rd) {
                     var fn = localPath || isrc.split('/').slice(-4).join('_');
 
+                    if (!rd || !rd.size) {
+                        return;
+                    }
                     return Framework7.file.writeFile(fn, rd)
                         .then(function (agff) {
-                            var lcn = agff.toInternalURL();
+                            var lcn =  Framework7.device.ios ? 
+                                        agff.toURL().replace('file://', '/_app_file_') : 
+                                        agff.toInternalURL();
                             delete imgLoadH[isrc];
                             self.emit('imageFetched', isrc, lcn);
                             return lcn;
@@ -366,7 +371,7 @@ var imgLoadH = {},
                 ds.src = vs;
                 this.fetchImageLocal(vs, ds.filename? ds.imgKey +'_' + ds.filename : null)
                 .then(function(localPath) {
-                    if (localPath === ds.src) {
+                    if (!localPath || (localPath === ds.src)) {
                         return;
                     }
                     ds.path = localPath;
@@ -381,7 +386,7 @@ var imgLoadH = {},
             return Promise.all(src.map(function(fi) {
                     return sel.fetchImageLocal(fi)
                             .then(function(rz) {
-                                return {ls :fi , path : rz};
+                                return {ls :fi , path : rz || fi};
                             })
                 }))
                 .then(function(rz) {
@@ -1418,7 +1423,7 @@ var imgLoadH = {},
             }, false);
 
             document.addEventListener(__eventTouchNames.touchend, function (evt) {
-                var touchCount = Object.keys(currentTouches).length;
+                var touchCount = Object.keys(__currentTouches).length;
                 __currentTouches = {};
                 if (touchCount === 3 || (device && device.isVirtual && touchCount === 2)) {
                     evt.preventDefault();
