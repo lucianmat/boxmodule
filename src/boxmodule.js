@@ -343,7 +343,7 @@ var imgLoadH = {},
                     }
                     return Framework7.file.writeFile(fn, rd)
                         .then(function (agff) {
-                            var lcn =  Framework7.device.ios ? 
+                            var lcn =  Framework7.device.ios && (typeof window.webkit != 'undefined') ? 
                                         agff.toURL().replace('file://', '/_app_file_') : 
                                         agff.toInternalURL();
                             delete imgLoadH[isrc];
