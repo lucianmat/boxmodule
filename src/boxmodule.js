@@ -618,68 +618,33 @@ var imgLoadH = {},
 
             data.count = parseInt(data.count) || 0;
             self.emit('push.received', data);
-            self.setBadgeNumber(data.count);
-            
-
-            return appDb.getItem('pushQueue')
-                .then(function (pq) {
-                    var tst = JSON.parse(pq || '[]');
-                    data.received = Framework7.utils.now();
-                    tst.push(data);
-                    return appDb.setItem('pushQueue', JSON.stringify(tst))
-                        .then(function () {
-
-                            if (data.additionalData &&
-                                (data.additionalData.foreground || data.additionalData.coldstart) && app.syncUpdate &&
-                                !app.appInBackground) {
-
-                                return app.syncUpdate({
-                                    pushNotifications: tst.map(function (ti) {
-                                        var rz = ti.additionalData || {};
-                                        rz.received = ti.received;
-                                        rz.count = ti.count;
-                                        return rz;
-                                    })
-                                })
-                                    .then(function (scs) {
-                                        var toOpen = {}, tsp;
-                                        if (!scs) {
-                                            if (data.additionalData &&
-                                                data.additionalData.openUrl) {
-                                                tsp = data.additionalData.openUrl.split(':');
-                                                toOpen.url = tsp[1];
-
-                                                toOpen.route = {};
-                                                toOpen.route[tsp[0]] = tsp[1];
-
-                                                app.view.current.router.navigate(toOpen, { hash: "top", context: data.additionalData });
-                                                data.additionalData.processed = true;
-                                                var tst2 = JSON.parse(pq || '[]');
-                                                tst2.push(data);
-                                                appDb.setItem('pushQueue', JSON.stringify(tst2));
-                                            }
-                                            return;
-                                        } else if (scs.openUrl) {
-                                            tsp = scs.openUrl.split(':');
-
-                                            if ((typeof scs.count !== 'undefined') && app.pushController && app.pushController.setApplicationIconBadgeNumber) {
-                                                app.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, scs.count);
-                                            }
-
-                                            toOpen.url = tsp[1];
-
-                                            toOpen.route = {};
-                                            toOpen.route[tsp[0]] = tsp[1];
-                                            app.view.current.router.navigate(toOpen, { hash: "top", context: scs.additionalData || {} });
-                                        }
-                                    });
-                            }
-                        });
+            return self.setBadgeNumber(data.count)
+                .then(function () {
+                    return app.syncInstallation({badge : count});
+                })
+                .then(function () {
+                    if (data.additionalData &&
+                        data.additionalData.openUrl) {
+                        tsp = data.additionalData.openUrl.split(':');
+                        toOpen.url = tsp[1];
+        
+                        toOpen.route = {};
+                        toOpen.route[tsp[0]] = tsp[1];
+        
+                        app.view.current.router.navigate(toOpen, { hash: "top", context: data.additionalData });
+                        data.additionalData.processed = true;
+                    }
                 });
+            
 
         },
         setPushNotificationBadge : function (count) {
-            app.setBadgeNumber(count);
+            return appDb.getItem('box.pushRegId').then(function (tz) {
+                return !tz?  false : app.setBadgeNumber(count)
+                    .then(function () {
+                        return app.syncInstallation({badge : count});
+                    });
+            });
         },
         isPushRegistered : function () {
             return appDb.getItem('box.pushRegId').then(function (tz) {
@@ -1339,70 +1304,8 @@ var imgLoadH = {},
                       
                     });
             }
-
-            return Framework7.isTraceEnabled()
-                .then(function (y) {
-                    if (!y) {
-                        return Promise.resolve();
-                    }
-
-                    return Parse.User.currentAsync()
-                        .then(function (usr) {
-                            var key = "analitycs",
-                                user = usr ? usr.id : false;
-
-                            dimensions = dimensions || {};
-                            dimensions.sessionId = boxModule.static.sessionId;
-                            dimensions.registered = (new Date()).toString();
-                            if (user) {
-                                dimensions.user = user;
-                            }
-
-                            return Framework7.localStorage.getItem(key)
-                                .then(function (lri) {
-                                    var tst = lri || {};
-                                    tst[name] = tst[name] || [];
-
-                                    tst[name].push(dimensions);
-                                    if (localStore || !app || !app.initialized) {
-                                        return Framework7.localStorage.setItem(key, tst);
-                                    }
-                                    return appDb.getItem(key)
-                                        .then(function (rzs) {
-                                            var postData = {},
-                                                cntr = 0,
-                                                i,
-                                                ri = rzs || {};
-
-                                            for (i in tst) {
-                                                ri[i] = ri[i] || [];
-                                                ri[i] = ri[i].concat(tst[i]);
-                                                postData[i] = JSON.stringify(ri[i]);
-                                                cntr = cntr + postData[i].length;
-                                            }
-                                            return app.connectionState()
-                                                .then(function() {
-                                                    if (!app.onLine || (cntr < 1024)) {
-                                                        return appDb.setItem(key, ri);
-                                                    }
-                                                    return app.syncInstallation()
-                                                        .then(function () {
-                                                            return Parse.Analytics.track('bulk', postData);
-                                                        })
-                                                        .then(function () {
-                                                            return Promise.all([Framework7.localStorage.removeItem(key),
-                                                            appDb.removeItem(key)]);
-                                                        })
-                                                        .catch(function () {
-                                                            return Promise.all([Framework7.localStorage.removeItem(key),
-                                                            appDb.setItem(key, ri)]);
-                                                        });
-                                                });
-                                           
-                                        });
-                                });
-                        });
-                });
+            return Promise.resolve(false);
+           
         },
         getFeature : function (name) {
             var fvl = app.params[app.id].features;
