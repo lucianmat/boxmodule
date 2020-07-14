@@ -445,12 +445,19 @@ var imgLoadH = {},
                         }
                         window.FirebasePlugin.setAutoInitEnabled(true);
                         window.FirebasePlugin.onTokenRefresh(function (fcmToken) {
-                            self.syncInstallation({ deviceToken: fcmToken });
+                            self.pushNotificationRegistered({registrationId : fcmToken});
                         });
                         
                         if (typeof window.FirebasePlugin.onMessageReceived === 'function') {
                             window.FirebasePlugin.onMessageReceived(self.receivedPushNotification.bind(self));
                         }
+                        return true;
+                    })
+                    .then(function (rt) {
+                        if (!_pushRequested) {
+                            Parse.Storage.setItemAsync('box.pushnotifications', (new Date()).toString());
+                        }
+                        return rt;
                     });
             }
 
@@ -502,21 +509,28 @@ var imgLoadH = {},
                         data.registrationId &&
                         lastRegId !== data.registrationId) {
 
-                        self.syncInstallation({ deviceToken: data.registrationId })
+                        return self.syncInstallation({ deviceToken: data.registrationId })
                             .then(function () {
                                 // TODO: on error fail to register push, retry ?
-                                appDb.setItem('box.pushRegId', data.registrationId);
+                                self.emit('push.registered', data);
+                                return appDb.setItem('box.pushRegId', data.registrationId);
                             });
                     }
                     self.emit('push.registered', data);
+                    return data;
                 });
 
         },
         unregisterPushNotification : function () {
             if (window.FirebasePlugin && (typeof window.FirebasePlugin.setAutoInitEnabled ==='function')) {
                 window.FirebasePlugin.setAutoInitEnabled(false, function(){
-                    window.FirebasePlugin.unregister();
-                    app.emit('push.unregistered');
+                    app.syncInstallation({ deviceToken: null })
+                    .then(function () {
+                        window.FirebasePlugin.unregister();
+                        app.emit('push.unregistered');
+                        appDb.removeItem('box.pushRegId');
+                    });
+                   
                 });
                 return Promise.resolve();
             }
@@ -539,8 +553,8 @@ var imgLoadH = {},
             } else if (!!window.FirebasePlugin && typeof window.FirebasePlugin.setBadgeNumber === 'function') {
 
                 if (window.FirebasePlugin.hasPermission) {
-                    window.FirebasePlugin.hasPermission(function (data ) {
-                        if (!data.isEnabled) {
+                    window.FirebasePlugin.hasPermission(function (hasPermission ) {
+                        if (!hasPermission) {
                             window.FirebasePlugin.grantPermission(function (hasPermission) {
                                 if (!hasPermission) {
                                     return;
@@ -548,12 +562,13 @@ var imgLoadH = {},
                                 window.FirebasePlugin.setBadgeNumber(nr);
                             })
 
+                        } else {
+                            window.FirebasePlugin.setBadgeNumber(nr);
                         }
                     }); 
                 } else {
                     window.FirebasePlugin.setBadgeNumber(nr);
                 }
-                
             }
             return Promise.resolve();
         },
@@ -759,9 +774,14 @@ var imgLoadH = {},
                                             instData.set('buildVersion', BuildInfo.version);
                                         }
 
+                                    } else {
+                                        appId = cfg.package;
+                                        if (cfg.buildVersion) {
+                                            instData.set('buildVersion', cfg.buildVersion);
+                                        }
                                     }
 
-                                    appId = appId || cfg.appId || cfg.appIdentifier || 'pro.businessbox.boxShell';
+                                    appId = appId ||  cfg.appId || cfg.appIdentifier || 'pro.businessbox.boxShell';
 
                                     instData.set('appIdentifier', appId);
                                     if (typeof device !== 'undefined') {
@@ -812,6 +832,11 @@ var imgLoadH = {},
                 }
                 tout = tout || 600;
                 container = container || app.$('.page-current .page-content');
+                if (!scrollTo) {
+                    container.scrollTop(0, tout);
+                    return;
+                }
+
                 if (typeof scrollTo.offset !== 'function') {
                     scrollTo = container.find(scrollTo);
                 }
