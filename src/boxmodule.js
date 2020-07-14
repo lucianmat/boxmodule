@@ -330,8 +330,8 @@ var imgLoadH = {},
             }
 
             imgLoadH[isrc] = true;
-            
-            return fetch(isrc, {method : 'GET'})
+            console.log('trying to cache local image:' + isrc);
+            return fetch(Parse.serverURL + 'proxy/' + isrc, {method : 'GET'})
                 .then(function (resp) {
                     return resp.blob();
                 })
@@ -343,9 +343,10 @@ var imgLoadH = {},
                     }
                     return Framework7.file.writeFile(fn, rd)
                         .then(function (agff) {
-                            var lcn =  Framework7.device.ios && (typeof window.webkit != 'undefined') ? 
-                                        agff.toURL().replace('file://', '/_app_file_') : 
-                                        agff.toInternalURL();
+                            ///var lcn = agff.toInternalURL();
+                            var lcn =  Framework7.device.ios && (typeof window.webkit != 'undefined') ? agff.toURL().replace('file://','/_app_file_') : 
+                                    agff.toInternalURL();
+                            console.log('cached image to:' + lcn);
                             delete imgLoadH[isrc];
                             self.emit('imageFetched', isrc, lcn);
                             return lcn;
@@ -386,7 +387,7 @@ var imgLoadH = {},
             return Promise.all(src.map(function(fi) {
                     return sel.fetchImageLocal(fi)
                             .then(function(rz) {
-                                return {ls :fi , path : rz || fi};
+                                return {ls :fi , path : rz};
                             })
                 }))
                 .then(function(rz) {
@@ -532,10 +533,27 @@ var imgLoadH = {},
         },
         setBadgeNumber : function (nr) {
             var self = this;
+            console.log('setting badge number to:' + nr);
             if (self.pushController && self.pushController.setApplicationIconBadgeNumber) {
                 self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, nr);
             } else if (!!window.FirebasePlugin && typeof window.FirebasePlugin.setBadgeNumber === 'function') {
-                window.FirebasePlugin.setBadgeNumber(nr);
+
+                if (window.FirebasePlugin.hasPermission) {
+                    window.FirebasePlugin.hasPermission(function (data ) {
+                        if (!data.isEnabled) {
+                            window.FirebasePlugin.grantPermission(function (hasPermission) {
+                                if (!hasPermission) {
+                                    return;
+                                }
+                                window.FirebasePlugin.setBadgeNumber(nr);
+                            })
+
+                        }
+                    }); 
+                } else {
+                    window.FirebasePlugin.setBadgeNumber(nr);
+                }
+                
             }
             return Promise.resolve();
         },
@@ -558,7 +576,7 @@ var imgLoadH = {},
                 title, body;
 
             data = data || {};
-
+            console.log('received push notification' + JSON.stringify(data));
             Framework7.log('push received', data);
             if(data.title){
                 title = data.title;
@@ -1170,7 +1188,7 @@ var imgLoadH = {},
         log: function () {
             if (console && typeof console.log === 'function') {
                 var args = Array.prototype.slice.call(arguments).map(function (il) {
-                    return JSON.stringify(il);
+                    return JSON.stringify(il && il.reason ? {message : il.reason.message,stack : il.reason.stack } : il);
                 });
 
                 _lg = _lg + 1;
@@ -1566,7 +1584,8 @@ function _runApp() {
             } 
             
         };
-
+        Framework7.log('unhandled error', errorMsg);
+        
         logMessage += ': url='+url+'; line='+line+'; col='+col;
 
         if ((typeof error === 'object') && (typeof StackTrace !== 'undefined') ){
@@ -1590,6 +1609,9 @@ function _runApp() {
     }
 
     document.addEventListener("deviceready", function () {
+        if (((typeof device === 'undefined') || (device && device.platform === 'browser'))) {
+            Framework7.file.useFs = false;
+        }
         Framework7.file.getContent('config.json', {rootFs : cordova.file.applicationDirectory})
         .then(function (resp) {
             if (Framework7.file.useFs) {
