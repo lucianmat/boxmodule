@@ -1068,14 +1068,24 @@ var imgLoadH = {},
                                                     reader.onloadend = function () {
                                                         var result = this.result;
                                                         if (prq.readAs === 'json') {
-                                                            result = JSON.parse(result);
+                                                            if (window.TextDecoder) {
+                                                                const enc = new TextDecoder('utf-8');
+                                                                result = JSON.parse(enc.decode(new Uint8Array(result)));
+                                                              } else if(String.fromCharCode) {
+                                                                result = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(result)));
+                                                              } else {
+                                                                result = JSON.parse(result);
+                                                              }
+                                                            
                                                         }
                                                         return resolve(result);
                                                     };
                                                     reader.onerror = reject;
-                                                    if ((prq.readAs === 'text') || (prq.readAs === 'json')) {
+                                                    if ((prq.readAs === 'text') 
+                                                    // || (prq.readAs === 'json')
+                                                    ) {
                                                         reader.readAsText(file);
-                                                    } else if (prq.readAs === 'array') {
+                                                    } else if ((prq.readAs === 'array') || (prq.readAs === 'json')) {
                                                         reader.readAsArrayBuffer(file);
                                                     } else if (prq.readAs === 'url') {
                                                         reader.readAsDataURL(file);
