@@ -22,6 +22,8 @@ if (!appSession) {
     }
 }
 
+
+
 var appDb = {
     getItem: function (key) {
         return (Parse.CoreManager.getStorageController().async ?
@@ -54,6 +56,12 @@ var appDb = {
     }
 };
 
+function hasFirebasePlugin(name, fct) {
+    return (typeof cordova.plugins != 'undefined') &&
+    (typeof cordova.plugins.firebase != 'undefined') &&
+    (typeof cordova.plugins.firebase[name] != 'undefined') &&
+    (!fct || (typeof cordova.plugins.firebase[name][fct] == 'function'))
+}
 
 function reportImage(url) {
     return new Promise(function (resolve, reject) {
@@ -70,7 +78,12 @@ function reportImage(url) {
 
 
 function _reportTrace(stackInfo, stack) {
-
+    if (hasFirebasePlugin('crashlytics', 'logError')) {
+        console.log('logged:');
+        console.log(stackInfo);
+        console.log(stack);
+        return cordova.plugins.firebase.crashlytics.logError(stackInfo);
+    }
     if (window.FirebasePlugin && (typeof window.FirebasePlugin.logError === 'function')) {
         window.FirebasePlugin.logError(stackInfo, stack, function(){
             console.log('logged:');
@@ -324,7 +337,7 @@ var imgLoadH = {},
         },
         fetchImageLocal : function (isrc, localPath) {
             var self = this;
-
+            return Promise.resolve(isrc); // disabled
             if (device && device.platform === 'browser') {
                 return Promise.resolve(isrc);
             }
@@ -409,7 +422,74 @@ var imgLoadH = {},
             Dom7(img).hide();
             this.emit('imageError', img);
         },
-        registerPushNotifications: function () {
+        registerPushNotifications() {
+            if (!hasFirebasePlugin('messaging', 'requestPermission')) {
+                return this.registerPushNotificationsFbPlugin();
+            }
+            var _pushRequested;
+            return Parse.Storage.getItemAsync('box.pushnotifications')
+               .then(function (pushRequested) {
+                   _pushRequested = pushRequested;
+                   return new Promise(function (resolve, reject) {
+                       
+                        cordova.plugins.firebase.messaging.requestPermission({forceShow: true})
+                        .then(function(){
+                            if (!hasFirebasePlugin('messaging', 'requestPermission')) {
+                                return resolve(true);
+                            }
+                            return cordova.plugins.firebase.messaging.getToken()
+                                .then(function (fcmToken) {
+                                    return self.syncInstallation({ deviceToken: fcmToken })
+                                        .then(function () {
+                                            resolve(true);
+                                        })
+                                }, function () {
+                                        return resolve(true);
+                                });
+                            }, function () {
+                                return resolve(false);
+                            }); 
+                       
+                   });
+               })
+               .then(function (enbl) {
+                   if (!enbl) {
+                       return enbl;
+                   }
+                   if (hasFirebasePlugin('messaging', 'onTokenRefresh')) {
+                        cordova.plugins.firebase.messaging.onTokenRefresh(function() {
+                            return cordova.plugins.firebase.messaging.getToken()
+                                .then(function (fcmToken) {
+                                    return self.syncInstallation({ deviceToken: fcmToken })
+                                        .then(function () {
+                                            resolve(true);
+                                        })
+                                }, function () {
+                                        return resolve(true);
+                                });
+                        });
+                   }
+                  
+                   if (hasFirebasePlugin('messaging','onMessage')) {
+                    cordova.plugins.firebase.messaging.onMessage(function(payload) {
+                        self.receivedPushNotification(payload);
+                    });
+                   }
+                   if (hasFirebasePlugin('messaging','onBackgroundMessage')) {
+                    cordova.plugins.firebase.messaging.onBackgroundMessage(function(payload) {
+                        self.receivedPushNotification(payload);
+                    });
+                   }
+                   return true;
+               })
+               .then(function (rt) {
+                   if (!_pushRequested) {
+                       Parse.Storage.setItemAsync('box.pushnotifications', (new Date()).toString());
+                   }
+                   return rt;
+               });
+        },
+        registerPushNotificationsFbPlugin: function () {
             var self = this;
 
             if (typeof PushNotification === 'undefined') {
@@ -522,6 +602,10 @@ var imgLoadH = {},
 
         },
         unregisterPushNotification : function () {
+            if (hasFirebasePlugin('messaging', 'deleteToken')) {
+                cordova.plugins.firebase.messaging.deleteToken();
+                return;
+            }
             if (window.FirebasePlugin && (typeof window.FirebasePlugin.setAutoInitEnabled ==='function')) {
                 window.FirebasePlugin.setAutoInitEnabled(false, function(){
                     app.syncInstallation({ deviceToken: null })
@@ -548,6 +632,10 @@ var imgLoadH = {},
         setBadgeNumber : function (nr) {
             var self = this;
             console.log('setting badge number to:' + nr);
+            if (hasFirebasePlugin('messaging','setBadge')) {
+                return cordova.plugins.firebase.messaging.setBadge(nr);
+            }
+
             if (self.pushController && self.pushController.setApplicationIconBadgeNumber) {
                 self.pushController.setApplicationIconBadgeNumber(_closeNotification, _closeNotification, nr);
             } else if (!!window.FirebasePlugin && typeof window.FirebasePlugin.setBadgeNumber === 'function') {
@@ -574,6 +662,9 @@ var imgLoadH = {},
         },
         getBadgeNumber : function () {
             var self = this;
+            if (hasFirebasePlugin('messaging','getBadge')) {
+               return  cordova.plugins.firebase.messaging.getBadge(nr);
+            }
             return new Promise(function (resolve, reject) {
                 if (self.pushController && self.pushController.getApplicationIconBadgeNumber) {
                     self.pushController.getApplicationIconBadgeNumber(function (cnt) {
@@ -1300,19 +1391,48 @@ var imgLoadH = {},
         setTraceEnabled : function (vl) {
             return Framework7.localStorage.setItem('traceEnabled', !!vl)
                 .then(function () {
+                    if (hasFirebasePlugin('analytics', 'setEnabled')) {
+                       return cordova.plugins.firebase.analytics.setEnabled(!!vl);
+                    }
+
                     if ((typeof window.FirebasePlugin !== 'undefined') && 
                     (typeof window.FirebasePlugin.setAnalyticsCollectionEnabled === 'function')) {
                         window.FirebasePlugin.setAnalyticsCollectionEnabled(!!vl);
                     }
+
                 })
         },
         analitycs: function (name, dimensions, localStore) {
+            if (name === 'AppOpened') { 
+                return Promise.resolve(); // no need
+            }
+
+            if (hasFirebasePlugin('analytics', 'logEvent')) {
+                return Framework7.isTraceEnabled()
+                    .then(function (y) {
+                        if (!y) {
+                            return;
+                        }
+                        return Parse.User.currentAsync()
+                            .then(function (usr) {
+
+                                if (usr &&  usr.id && (hasFirebasePlugin('analytics', 'setUserId'))) {
+                                    cordova.plugins.firebase.analytics.setUserId(usr.id);
+                                }
+                                if (hasFirebasePlugin('analytics','setCurrentScreen') && dimensions && (dimensions.title || dimensions.name)) {
+                                    cordova.plugins.firebase.analytics.setCurrentScreen(dimensions.title  || dimensions.name);
+                                }
+
+                                cordova.plugins.firebase.analytics.logEvent(name, dimensions);
+                            });
+                      
+                    });
+            }
+
             if ((typeof window.FirebasePlugin !=='undefined') && 
                (typeof window.FirebasePlugin.logEvent === 'function')) {
 
-                if (name === 'AppOpened') { 
-                    return Promise.resolve(); // no need
-                }
+               
                 return Framework7.isTraceEnabled()
                     .then(function (y) {
                         if (!y) {
@@ -1339,6 +1459,8 @@ var imgLoadH = {},
                       
                     });
             }
+
+
             return Promise.resolve(false);
            
         },
@@ -1511,30 +1633,53 @@ function _runApp() {
         Framework7.log('unhandled rejection', e);
         _reportTrace(e);
     };
-
-    window.onerror = function(errorMsg, url, line, col, error) {
-        var logMessage = errorMsg;
-        var stackTrace = null;
-        
-        var sendError = function(){
-            if (typeof FirebasePlugin !== 'undefined') {
-                FirebasePlugin.logError(logMessage, stackTrace);
-            } 
-            
-        };
-        Framework7.log('unhandled error', errorMsg);
-        
-        logMessage += ': url='+url+'; line='+line+'; col='+col;
-
-        if ((typeof error === 'object') && (typeof StackTrace !== 'undefined') ){
-            StackTrace.fromError(error).then(function(trace){
-                stackTrace = trace;
-                _reportTrace(logMessage, stackTrace);
-            });
-        }else{
+    if (typeof window.addEventListener == 'function') {
+        window.addEventListener('unhandledrejection', function (event) {
+            var logMessage = errorMsg;
+            var stackTrace = null;
+            Framework7.log('unhandled error', errorMsg);
             _reportTrace(logMessage, stackTrace);
-        }
-    };
+            if (typeof event.preventDefault == 'function') {
+                event.preventDefault();
+            }
+        }); 
+        window.addEventListener('error', function(errorMsg, url, line, col, error) {
+                var logMessage = errorMsg;
+                var stackTrace = null;
+            
+                Framework7.log('unhandled error', errorMsg);
+                
+                logMessage += ': url='+url+'; line='+line+'; col='+col;
+        
+                if ((typeof error === 'object') && (typeof StackTrace !== 'undefined') ){
+                    StackTrace.fromError(error).then(function(trace){
+                        stackTrace = trace;
+                        _reportTrace(logMessage, stackTrace);
+                    });
+                }else{
+                    _reportTrace(logMessage, stackTrace);
+                }
+            });
+    } else {
+        window.onerror = function(errorMsg, url, line, col, error) {
+            var logMessage = errorMsg;
+            var stackTrace = null;
+          
+            Framework7.log('unhandled error', errorMsg);
+            
+            logMessage += ': url='+url+'; line='+line+'; col='+col;
+    
+            if ((typeof error === 'object') && (typeof StackTrace !== 'undefined') ){
+                StackTrace.fromError(error).then(function(trace){
+                    stackTrace = trace;
+                    _reportTrace(logMessage, stackTrace);
+                });
+            }else{
+                _reportTrace(logMessage, stackTrace);
+            }
+        };
+    }
+   
     
 
     if (typeof TraceKit !== 'undefined') {
